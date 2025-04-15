@@ -7,7 +7,7 @@
 The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.
 
 ## Features
-** IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently. **
+** IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently.**
 ** Currently developing. Please open an issue for ideas or bugs.**
 * **Process Attachment:** Attach to a target process using its Process ID (PID).
 * **Hardware Breakpoints:** Set hardware execution breakpoints at specific memory addresses.
@@ -22,6 +22,10 @@ The debugger works by installing kernel exception handlers and utilizing privile
     * Resume the entire target process.
     * Perform single-step execution after a breakpoint is hit.
 * **Exception Handling:** Catches Prefetch Abort (PABT), Data Abort (DABT), and Undefined Instruction exceptions within the target process.
+
+## Future/Roadmap
+* **Implement user-interface for GUI debugging.
+* **Add user-mode application (VPK) for sending commands through TCP.
 
 ## Prerequisites
 
@@ -42,7 +46,6 @@ This generates the kernel module `pebble_k.skprx`.
 ## Usage (API)
 
 **Call Exported Functions:** Use the following functions exported by the kernel module:
-
     * `int kernel_debugger_attach(SceUID pid);`
         * Attaches the debugger to the specified process PID.
     * `int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);`
@@ -65,3 +68,7 @@ This generates the kernel module `pebble_k.skprx`.
         * Resumes the target process (usually after a breakpoint/exception).
     * `int kernel_single_step(void);`
         * Executes the next instruction after a breakpoint hit.
+
+## Credits
+Princess of Sleeping: Hardware Breakpoint/Watchpoint usage.
+DaveeFTW: kvdb usage.
