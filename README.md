@@ -4,7 +4,7 @@
 
 **Project Pebble.** is a lightweight debugger tool-set for the PlayStation Vita, designed to provide basic debugging capabilities for user/kernel processes.\
 \
-The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.\
+The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.
 
 ## Features
 ** IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently.**
