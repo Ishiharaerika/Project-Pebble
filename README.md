@@ -2,9 +2,9 @@
 
 ## Description
 
-`Project Pebble.` is a lightweight debugger tool-set for the PlayStation Vita, designed to provide basic debugging capabilities for user/kernel processes.
-
-The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.
+**Project Pebble.** is a lightweight debugger tool-set for the PlayStation Vita, designed to provide basic debugging capabilities for user/kernel processes.\
+\
+The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.\
 
 ## Features
 ** IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently.**
@@ -46,6 +46,7 @@ This generates the kernel module `pebble_k.skprx`.
 ## Usage (API)
 
 **Call Exported Functions:** Use the following functions exported by the kernel module:
+
     * `int kernel_debugger_attach(SceUID pid);`
         * Attaches the debugger to the specified process PID.
     * `int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);`
@@ -70,5 +71,5 @@ This generates the kernel module `pebble_k.skprx`.
         * Executes the next instruction after a breakpoint hit.
 
 ## Credits
-Princess of Sleeping: Hardware Breakpoint/Watchpoint usage.
+Princess of Sleeping: Hardware Breakpoint/Watchpoint usage.\
 DaveeFTW: kvdb usage.
