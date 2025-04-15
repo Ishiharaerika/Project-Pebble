@@ -7,8 +7,8 @@
 The debugger works by installing kernel exception handlers and utilizing privileged kernel functions/taiHEN functions to manage hardware/software breakpoints and process states.
 
 ## Features
-** IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently.**\
-** Currently developing. Please open an issue for ideas or bugs.**
+**IMPORTANT NOTICE: This plugin may only work on firmware 3.65 currently.\
+Currently developing. Please open an issue for ideas or bugs.**
 * **Process Attachment:** Attach to a target process using its Process ID (PID).
 * **Hardware Breakpoints:** Set hardware execution breakpoints at specific memory addresses.
 * **Watchpoints:** Set hardware watchpoints on memory addresses to break on read, write, or read/write access.
