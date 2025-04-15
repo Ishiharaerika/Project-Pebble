@@ -47,28 +47,28 @@ This generates the kernel module `pebble_k.skprx`.
 
 **Call Exported Functions:** Use the following functions exported by the kernel module:
 
-    * `int kernel_debugger_attach(SceUID pid);`
-        * Attaches the debugger to the specified process PID.
-    * `int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);`
-        * Sets a hardware execution breakpoint.
-    * `int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type);`
-        * Sets a hardware watchpoint (`type` can be `BREAK_READ`, `BREAK_WRITE`, `BREAK_READ_WRITE`).
-    * `int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type);`
-        * Sets a software breakpoint (`type` should be `SW_BREAKPOINT_THUMB` or `SW_BREAKPOINT_ARM`).
-    * `int kernel_clear_breakpoint(int index);`
-        * Clears the breakpoint/watchpoint at the given index (obtainable from `kernel_list_breakpoints`).
-    * `int kernel_list_breakpoints(ActiveBKPTSlot *user_dst);`
-        * Copies the list of active breakpoints/watchpoints into the user-provided buffer `user_dst`. Returns the number of active slots or an error code.
-    * `int kernel_get_registers(ExceptionContext *user_dst);`
-        * Copies the saved CPU context from the last exception into `user_dst`.
-    * `int kernel_get_callstack(uint32_t *user_dst, int depth);`
-        * Copies the call stack (up to `depth` entries) into `user_dst`. Returns the number of frames retrieved or an error code.
-    * `int kernel_suspend_process(SceUID pid);`
-        * Suspends the target process.
-    * `int kernel_resume_process(SceUID pid);`
-        * Resumes the target process (usually after a breakpoint/exception).
-    * `int kernel_single_step(void);`
-        * Executes the next instruction after a breakpoint hit.
+    int kernel_debugger_attach(SceUID pid);
+     * Attaches the debugger to the specified process PID.
+    int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);
+     * Sets a hardware execution breakpoint.
+    int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type);
+     * Sets a hardware watchpoint (`type` can be `BREAK_READ`, `BREAK_WRITE`, `BREAK_READ_WRITE`).
+    int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type);
+     * Sets a software breakpoint (`type` should be `SW_BREAKPOINT_THUMB` or `SW_BREAKPOINT_ARM`).
+    int kernel_clear_breakpoint(int index);
+     * Clears the breakpoint/watchpoint at the given index (obtainable from `kernel_list_breakpoints`).
+    int kernel_list_breakpoints(ActiveBKPTSlot *user_dst);
+     * Copies the list of active breakpoints/watchpoints into the user-provided buffer `user_dst`. Returns the number of active slots or an error code.
+    int kernel_get_registers(ExceptionContext *user_dst);
+     * Copies the saved CPU context from the last exception into `user_dst`.
+    int kernel_get_callstack(uint32_t *user_dst, int depth);
+     * Copies the call stack (up to `depth` entries) into `user_dst`. Returns the number of frames retrieved or an error code.
+    int kernel_suspend_process(SceUID pid);
+     * Suspends the target process.
+    int kernel_resume_process(SceUID pid);
+     * Resumes the target process (usually after a breakpoint/exception).
+    int kernel_single_step(void);
+     * Executes the next instruction after a breakpoint hit.
 
 ## Credits
 Princess of Sleeping: Hardware Breakpoint/Watchpoint usage.\
