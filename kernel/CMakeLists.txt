@@ -9,13 +9,8 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
-project(pebbel_k LANGUAGES C ASM)
+project(pebble_k LANGUAGES C ASM)
 
-set(ELF_TARGET ${PROJECT_NAME})
-set(SKPRX_FILE ${ELF_TARGET}.skprx)
-set(STUB_TARGET_NAME ${PROJECT_NAME}_stub)
-set(STUB_LIB_FILE "lib${STUB_TARGET_NAME}.a")
-set(STUB_GENERATION_TARGET stubs)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib -Wall -Wextra -Wpedantic -O3 -std=gnu99")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
 
@@ -23,13 +18,13 @@ include_directories(
   include
 )
 
-add_executable(${ELF_TARGET}
+add_executable(pebble_k
   src/main.c
   src/exceptions.S
   src/exceptions.c
 )
 
-target_link_libraries(${ELF_TARGET}
+target_link_libraries(pebble_k
   taihenModuleUtils_stub
   SceThreadmgrForKernel_stub
   SceThreadmgrForDriver_stub
@@ -42,21 +37,19 @@ target_link_libraries(${ELF_TARGET}
   SceDebugForDriver_stub
 )
 
-vita_create_self(${SKPRX_FILE} ${ELF_TARGET}
+vita_create_self(pebble_k.skprx pebble_k
   CONFIG exports.yml
   UNSAFE
 )
 
-vita_create_stubs(${STUB_GENERATION_TARGET}
-  "${ELF_TARGET}"
+vita_create_stubs(stubs
+  "pebble_k"
   exports.yml
   KERNEL
 )
 
-add_library(${STUB_TARGET_NAME} STATIC IMPORTED GLOBAL)
+add_library(pebble_k_stub STATIC IMPORTED GLOBAL)
 
-add_dependencies(${STUB_TARGET_NAME} ${STUB_GENERATION_TARGET})
-
-set_target_properties(${STUB_TARGET_NAME} PROPERTIES
-  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${STUB_LIB_FILE}"
+set_target_properties(pebble_k_stub PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libpebble_k_stub.a"
 )
