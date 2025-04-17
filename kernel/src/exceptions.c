@@ -23,7 +23,7 @@ int exception_handler(void) {
         if ((g_active_slot[i].type == SW_BREAKPOINT_THUMB || g_active_slot[i].type == SW_BREAKPOINT_ARM) &&
             g_active_slot[i].address == pc_addr) {
             uint32_t size = (g_active_slot[i].type == SW_BREAKPOINT_THUMB) ? 2 : 4;
-            ksceKernelRxMemcpyKernelToUserForPid(g_target_process.pid, (void *)pc_addr, &g_active_slot[i].p_instruction, size);
+            ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)pc_addr, &g_active_slot[i].p_instruction, size);
             break;
         }
     }
