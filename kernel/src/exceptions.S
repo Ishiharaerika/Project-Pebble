@@ -9,7 +9,7 @@ handler_asm:
   .word 0x0
   .word 0x0
 
-  @ Call exception_handler with no parameters
+  @ Call exception_handler
   mov   r4, r0
   stmfd sp!, {r4, lr}
   cpsie i
