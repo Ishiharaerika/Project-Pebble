@@ -202,7 +202,11 @@ int kernel_resume_process(SceUID pid) {
         ksceDebugPrintf("Let a BKPT be triggered first to use RESUME.");
         return -1;
     }
-    return (pid <= 0) ? -1 : ksceKernelResumeProcess(pid);
+
+    if (pid <= 0) return -1;
+    ksceKernelChangeThreadSuspendStatus(g_target_process.exception_thid, 2);
+    ksceKernelResumeProcess(pid);
+    return 0;
 }
 
 int kernel_single_step(void) {
