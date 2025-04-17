@@ -6,7 +6,7 @@ SceArmCpuRegisters current_registers;
 
 int exception_handler(void) {
     SceKernelThreadContextInfo info;
-    if (ksceKernelGetFaultingProcessInfo(&info) < 0) 
+    if (ksceKernelGetThreadContextInfo(&info) < 0) 
         return EXCEPTION_NOT_HANDLED;
     if (g_target_process.pid != info.process_id) 
         return EXCEPTION_NOT_HANDLED;
