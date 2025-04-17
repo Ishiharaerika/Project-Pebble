@@ -1,38 +1,45 @@
-#include <psp2kern/kernel/excpmgr.h>
-#include <psp2kern/kernel/sysclib.h>
-#include <psp2kern/kernel/threadmgr/debugger.h>
-
 #include "kernel.h"
 
-extern void handler_asm(void);
+void handler_asm(void);
+SceThreadCpuRegisters all_registers;
+SceArmCpuRegisters current_registers;
 
 int exception_handler(void) {
-  SceKernelThreadContextInfo info;
-  ThreadCpuRegisters temp_registers;
-  int ret;
+    SceKernelThreadContextInfo info;
+    if (ksceKernelGetFaultingProcessInfo(&info) < 0) 
+        return EXCEPTION_NOT_HANDLED;
+    if (g_target_process.pid != info.process_id) 
+        return EXCEPTION_NOT_HANDLED;
 
-  if ((ret = ksceKernelGetThreadContextInfo(&info)) < 0) return EXCEPTION_NOT_HANDLED;
+    g_target_process.exception_thid = info.thread_id;
+    if (ksceKernelGetThreadCpuRegisters(info.thread_id, &all_registers) < 0) 
+        return EXCEPTION_NOT_HANDLED;
+	
+    current_registers = ((all_registers.user.cpsr & 0x1F) == 0x10) ? all_registers.user : all_registers.kernel;
+    uint32_t pc_addr = current_registers.pc;
+	
+    // Restore original instruction if it's a software breakpoint
+    for (int i = 0; i < MAX_SLOT; ++i) {
+        if ((g_active_slot[i].type == SW_BREAKPOINT_THUMB || g_active_slot[i].type == SW_BREAKPOINT_ARM) &&
+            g_active_slot[i].address == pc_addr) {
+            uint32_t size = (g_active_slot[i].type == SW_BREAKPOINT_THUMB) ? 2 : 4;
+            ksceKernelRxMemcpyKernelToUserForPid(g_target_process.pid, (void *)pc_addr, &g_active_slot[i].p_instruction, size);
+            break;
+        }
+    }
 
-  if (g_target_process.pid != info.process_id) return EXCEPTION_NOT_HANDLED;
+    // Clear single step breakpoint if hit
+    if (g_active_slot[SINGLE_STEP_SLOT].type == SINGLE_STEP_HW_BREAKPOINT &&
+        g_active_slot[SINGLE_STEP_SLOT].address == pc_addr) {
+        kernel_clear_breakpoint(SINGLE_STEP_SLOT);
+    }
 
-  g_target_process.exception_thid = info.thread_id;
-
-  if ((ret = ksceKernelGetThreadCpuRegisters(info.thread_id, &temp_registers)) < 0)
+    ksceKernelChangeThreadSuspendStatus(info.thread_id, 0x1002);
     return EXCEPTION_NOT_HANDLED;
-
-  memcpy(&g_saved_context, &temp_registers.user, sizeof(ExceptionContext));
-
-  if (g_active_slot[SINGLE_STEP_SLOT].type == SINGLE_STEP_HW_BREAKPOINT &&
-      g_active_slot[SINGLE_STEP_SLOT].address == temp_registers.user.pc) {
-    kernel_clear_breakpoint(SINGLE_STEP_SLOT);
-  }
-
-  ksceKernelChangeThreadSuspendStatus(info.thread_id, 0x1002);
-  return EXCEPTION_NOT_HANDLED;
 }
 
 void register_handler(void) {
-  ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 5, (void *)handler_asm);
-  ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 5, (void *)handler_asm);
-  ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 5, (void *)handler_asm);
+    ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 5, (void *)handler_asm);
+    ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 5, (void *)handler_asm);
+    ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 5, (void *)handler_asm);
 }

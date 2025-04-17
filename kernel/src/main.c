@@ -1,17 +1,10 @@
 /**
-* PSVita Lightweight Debugger
-* Kernel module implementation
-*/
+ * PSVita Lightweight Debugger
+ * Kernel module implementation
+ */
 #include "kernel.h"
 
-#include <psp2kern/kernel/sysmem/data_transfers.h>
-#include <psp2kern/kernel/debug.h>
-#include <psp2kern/kernel/cpu.h>
-#include <psp2kern/kernel/modulemgr.h>
-#include <psp2kern/kernel/processmgr.h>
-
 TargetProcess g_target_process;
-ExceptionContext g_saved_context;
 ActiveBKPTSlot g_active_slot[MAX_SLOT];
 
 int module_get_export_func(SceUID pid, const char *modname, uint32_t libnid, uint32_t funcnid, uintptr_t *func);
@@ -21,9 +14,8 @@ int (*ksceKernelSetPHBP)(SceUID pid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
 
 static int find_slot(int start, int end) {
     for (int i = start; i < end; ++i) {
-        if (g_active_slot[i].type == SLOT_NONE) {
+        if (g_active_slot[i].type == SLOT_NONE)
             return i;
-        }
     }
     return -1;
 }
@@ -61,10 +53,10 @@ int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address) {
         slot->address = address;
         slot->index = index;
         slot->type = HW_BREAKPOINT;
-        ksceDebugPrintf("HW breakpoint set for PID 0x%08X in slot %d\n", pid, index);
+        ksceDebugPrintf("Hardware breakpoint set for PID 0x%08X in slot %d\n", pid, index);
         return ret;
     }
-    ksceDebugPrintf("Failed to set HW breakpoint for PID 0x%08X\n", pid);
+    ksceDebugPrintf("Failed to set hardware breakpoint for PID 0x%08X\n", pid);
     return -1;
 }
 
@@ -91,7 +83,7 @@ int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type
         slot->address = address;
         slot->index = index;
         slot->type = (type == BREAK_READ) ? HW_WATCHPOINT_R :
-                    (type == BREAK_WRITE) ? HW_WATCHPOINT_W : HW_WATCHPOINT_RW;
+                     (type == BREAK_WRITE) ? HW_WATCHPOINT_W : HW_WATCHPOINT_RW;
         ksceDebugPrintf("Watchpoint set for PID 0x%08X in slot %d\n", pid, index);
         return ret;
     }
@@ -125,7 +117,7 @@ int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type) 
     slot->index = index;
     slot->p_instruction = original_instruction;
     slot->type = type;
-    ksceDebugPrintf("SW breakpoint set for PID 0x%08X in slot %d\n", pid, index);
+    ksceDebugPrintf("Software breakpoint set for PID 0x%08X in slot %d\n", pid, index);
     return write_ret;
 }
 
@@ -156,9 +148,9 @@ int kernel_list_breakpoints(ActiveBKPTSlot *user_dst) {
     return ksceKernelCopyToUserProcTextDomain(ksceKernelGetProcessId(), (void *)user_dst, &g_active_slot, sizeof(ActiveBKPTSlot));
 }
 
-int kernel_get_registers(ExceptionContext *user_dst) {
+int kernel_get_registers(SceArmCpuRegisters *user_dst) {
     if (user_dst == NULL) return -2;
-    return ksceKernelCopyToUserProcTextDomain(ksceKernelGetProcessId(), (void *)user_dst, &g_saved_context, sizeof(ExceptionContext));
+    return ksceKernelCopyToUserProcTextDomain(ksceKernelGetProcessId(), (void *)user_dst, &current_registers, sizeof(SceArmCpuRegisters));
 }
 
 int kernel_get_callstack(uint32_t *user_dst, int depth) {
@@ -175,8 +167,8 @@ int kernel_get_callstack(uint32_t *user_dst, int depth) {
     int current_depth = 0;
     int max_depth = (depth < MAX_CALL_STACK_DEPTH) ? depth : MAX_CALL_STACK_DEPTH;
 
-    call_stack_buffer[current_depth++] = g_saved_context.pc;
-    uint32_t current_fp = g_saved_context.r11;
+    call_stack_buffer[current_depth++] = current_registers.pc;
+    uint32_t current_fp = current_registers.r11;
 
     while (current_depth < max_depth) {
         if (current_fp == 0 || (current_fp & 3) != 0) break;
@@ -217,13 +209,12 @@ int kernel_single_step(void) {
     if (g_active_slot[SINGLE_STEP_SLOT].type != SLOT_NONE)
         return -1;
 
-    ThreadCpuRegisters current_registers;
-    if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &current_registers) < 0) {
+    if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &all_registers) < 0) {
         ksceDebugPrintf("Let a BKPT be triggered first to use STEP.");
         return -1;
     }
 
-    uint32_t current_pc = current_registers.user.pc;
+    uint32_t current_pc = current_registers.pc;
     uint32_t next_pc;
     uint32_t instruction = 0;
     
@@ -232,7 +223,7 @@ int kernel_single_step(void) {
     if (read_ret < 0) return read_ret;
     
     // Determine next PC based on current instruction
-    if ((current_registers.user.cpsr & (1 << 5)) != 0) {
+    if ((current_registers.cpsr & (1 << 5)) != 0) {
         // Thumb mode
         uint16_t thumb_instr = instruction & 0xFFFF;
         
@@ -248,7 +239,7 @@ int kernel_single_step(void) {
             
             uint32_t cond = (thumb_instr >> 8) & 0xF;
             int condition_met = 0;
-            uint32_t cpsr = current_registers.user.cpsr;
+            uint32_t cpsr = current_registers.cpsr;
             
             switch (cond) {
                 case 0: condition_met = (cpsr & (1 << 30)) != 0; break; // EQ: Z set
