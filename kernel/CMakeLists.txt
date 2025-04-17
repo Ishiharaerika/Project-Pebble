@@ -48,7 +48,7 @@ vita_create_stubs(stubs
   KERNEL
 )
 
-add_library(pebble_k_stub STATIC IMPORTED GLOBAL)
+add_library("pebble_k_stub" STATIC IMPORTED GLOBAL)
 
 set_target_properties(pebble_k_stub PROPERTIES
   IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libpebble_k_stub.a"
