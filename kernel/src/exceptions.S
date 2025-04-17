@@ -1,5 +1,5 @@
 .section .text
-.global handler_asm_pabt handler_asm_dabt handler_asm_undef
+.global handler_asm_pabt, handler_asm_dabt, handler_asm_undef
 .arch armv7-a
 .align 4
 .syntax unified
