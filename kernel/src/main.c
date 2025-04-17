@@ -12,7 +12,7 @@ int (*ksceKernelSetTHBP)(SceUID thid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
 int (*ksceKernelSetPHWP)(SceUID pid, SceUInt32 a2, void *WVR, SceUInt32 WCR);
 int (*ksceKernelSetPHBP)(SceUID pid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
 
-static int find_slot(int start, int end) {
+static int find_empty_slot(int start, int end) {
     for (int i = start; i < end; ++i) {
         if (g_active_slot[i].type == SLOT_NONE)
             return i;
