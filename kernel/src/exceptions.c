@@ -1,6 +1,8 @@
 #include "kernel.h"
 
-void handler_asm(void);
+void handler_asm_pabt(void);
+void handler_asm_dabt(void);
+void handler_asm_undef(void);
 SceThreadCpuRegisters all_registers;
 SceArmCpuRegisters current_registers;
 
