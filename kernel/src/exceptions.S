@@ -1,11 +1,14 @@
 .section .text
-.global handler_asm
+.global handler_asm_pabt handler_asm_dabt handler_asm_undef
 .arch armv7-a
 .align 4
 .syntax unified
 
 .arm
-handler_asm:
+
+handler_asm_undef:
+handler_asm_dabt:
+handler_asm_pabt:
   .word 0x0
   .word 0x0
 

@@ -39,7 +39,10 @@ int exception_handler(void) {
 }
 
 void register_handler(void) {
-    ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 5, (void *)handler_asm);
-    ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 5, (void *)handler_asm);
-    ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 5, (void *)handler_asm);
+    if(ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 5, (void *)handler_asm_pabt) < 0)
+        return -1;
+    if(ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 5, (void *)handler_asm_dabt) < 0)
+        return -1;
+    if(ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 5, (void *)handler_asm_undef) < 0)
+        return -1;
 }
