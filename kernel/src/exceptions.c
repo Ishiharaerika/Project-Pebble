@@ -40,7 +40,7 @@ int exception_handler(void) {
     return EXCEPTION_NOT_HANDLED;
 }
 
-void register_handler(void) {
+int register_handler(void) {
     if(ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 5, (void *)handler_asm_pabt) < 0)
         return -1;
     if(ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 5, (void *)handler_asm_dabt) < 0)
