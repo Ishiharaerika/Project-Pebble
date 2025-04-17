@@ -71,5 +71,6 @@ This generates the kernel module `pebble_k.skprx`.
      * Executes the next instruction after a breakpoint hit.
 
 ## Credits
-Princess of Sleeping: Hardware Breakpoint/Watchpoint usage.\
-DaveeFTW: kvdb usage.
+[Princess of Sleeping](https://github.com/Princess-of-Sleeping): Hardware Breakpoint/Watchpoint usage.\
+[DaveeFTW](https://github.com/DaveeFTW): kvdb usage.\
+[CreepNT](https://github.com/CreepNT): Exception handling.
