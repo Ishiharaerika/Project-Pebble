@@ -72,4 +72,4 @@ int kernel_get_callstack(uint32_t *user_dst, int depth);
 int kernel_suspend_process(SceUID pid);
 int kernel_resume_process(SceUID pid);
 int kernel_single_step(void);
-void register_handler(void);
+int register_handler(void);
