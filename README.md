@@ -21,6 +21,7 @@ Currently developing. Please open an issue for ideas or bugs.**
     * Suspend the entire target process.
     * Resume the entire target process.
     * Perform single-step execution after a breakpoint is hit.
+* **Read/Write Memory:** Ability for read/write RW/RX memory, a.k.a data and instructions.
 * **Exception Handling:** Catches Prefetch Abort (PABT), Data Abort (DABT), and Undefined Instruction exceptions within the target process.
 
 ## Future/Roadmap
@@ -49,26 +50,34 @@ This generates the kernel module `pebble_k.skprx`.
 
     int kernel_debugger_attach(SceUID pid);
      * Attaches the debugger to the specified process PID.
-    int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);
+    int kernel_set_hardware_breakpoint(uint32_t address);
      * Sets a hardware execution breakpoint.
-    int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type);
+    int kernel_set_watchpoint(uint32_t address, WatchPointBreakType type);
      * Sets a hardware watchpoint (`type` can be `BREAK_READ`, `BREAK_WRITE`, `BREAK_READ_WRITE`).
-    int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type);
+    int kernel_set_software_breakpoint(uint32_t address, SlotType type);
      * Sets a software breakpoint (`type` should be `SW_BREAKPOINT_THUMB` or `SW_BREAKPOINT_ARM`).
     int kernel_clear_breakpoint(int index);
      * Clears the breakpoint/watchpoint at the given index (obtainable from `kernel_list_breakpoints`).
     int kernel_list_breakpoints(ActiveBKPTSlot *user_dst);
      * Copies the list of active breakpoints/watchpoints into the user-provided buffer `user_dst`. Returns the number of active slots or an error code.
-    int kernel_get_registers(ExceptionContext *user_dst);
-     * Copies the saved CPU context from the last exception into `user_dst`.
+    int kernel_get_registers(SceArmCpuRegisters *user_dst);
+     * Get current registers after a breakpoint is triggered.
     int kernel_get_callstack(uint32_t *user_dst, int depth);
      * Copies the call stack (up to `depth` entries) into `user_dst`. Returns the number of frames retrieved or an error code.
-    int kernel_suspend_process(SceUID pid);
-     * Suspends the target process.
-    int kernel_resume_process(SceUID pid);
-     * Resumes the target process (usually after a breakpoint/exception).
+    int kernel_get_moduleinfo(SceKernelModuleInfo *module_info);
+     * Get the attached process's **MAIN** module info.
+    int kernel_suspend_process(void);
+     * Suspends attached process.
+    int kernel_resume_process(void);
+     * Resumes attached process (usually after a breakpoint/exception).
     int kernel_single_step(void);
      * Executes the next instruction after a breakpoint hit.
+    int kernel_read_memory(const void *user_src);
+     * Read attached process's memory.
+    int kernel_write_memory(void *user_dst, const void *user_modification, SceSize memwrite_len);
+     * Write attached process's RW memory.
+    int kernel_write_instruction(void *user_dst, const void *user_modification, SceSize memwrite_len);
+     * Write attached process's RX memory.
 
 ## Credits
 [**Princess of Sleeping**](https://github.com/Princess-of-Sleeping): Hardware Breakpoint/Watchpoint usage.\
