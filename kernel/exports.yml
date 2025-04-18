@@ -21,3 +21,6 @@ pebble_k:
       - kernel_suspend_process
       - kernel_resume_process
       - kernel_single_step
+      - kernel_read_memory
+      - kernel_write_memory
+      - kernel_write_instruction
