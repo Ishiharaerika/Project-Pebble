@@ -11,6 +11,7 @@ pebble_k:
       syscall: true
       functions:
       - kernel_debugger_attach
+      - kernel_debugger_init
       - kernel_set_hardware_breakpoint
       - kernel_set_watchpoint
       - kernel_set_software_breakpoint
@@ -18,6 +19,7 @@ pebble_k:
       - kernel_list_breakpoints
       - kernel_get_registers
       - kernel_get_callstack
+      - kernel_get_moduleinfo
       - kernel_suspend_process
       - kernel_resume_process
       - kernel_single_step

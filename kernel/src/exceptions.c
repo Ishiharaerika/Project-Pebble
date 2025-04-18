@@ -47,5 +47,6 @@ int register_handler(void) {
         return -1;
     if(ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 5, (void *)handler_asm_undef) < 0)
         return -1;
+    
     return 0;
 }

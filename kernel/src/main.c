@@ -40,31 +40,34 @@ int kernel_debugger_attach(SceUID pid) {
     return 0;
 }
 
-int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address) {
-    if (pid <= 0) return -1;
+void kernel_debugger_init(void) {
+    g_target_process.pid = -1;
+    g_target_process.main_module_id = -1;
+    g_target_process.main_thread_id = -1;
+    g_target_process.exception_thid = -1;
+}
 
+int kernel_set_hardware_breakpoint(uint32_t address) {
     int index = find_empty_slot(0, SINGLE_STEP_SLOT);
     if (index == -1) return -1;
 
     uint32_t BCR = (1 << 0) | (0x3 << 1) | (0xF << 5) | (0x1 << 14) | (0x0 << 20);
-    int ret = ksceKernelSetPHBP(pid, index, (void *)address, BCR);
+    int ret = ksceKernelSetPHBP(g_target_process.pid, index, (void *)address, BCR);
 
     if (ret >= 0) {
         ActiveBKPTSlot *slot = &g_active_slot[index];
-        slot->pid = pid;
+        slot->pid = g_target_process.pid;
         slot->address = address;
         slot->index = index;
         slot->type = HW_BREAKPOINT;
-        ksceDebugPrintf("Hardware breakpoint set for PID 0x%08X in slot %d\n", pid, index);
+        ksceDebugPrintf("Hardware breakpoint set for PID 0x%08X in slot %d\n", g_target_process.pid, index);
         return ret;
     }
-    ksceDebugPrintf("Failed to set hardware breakpoint for PID 0x%08X\n", pid);
+    ksceDebugPrintf("Failed to set hardware breakpoint for PID 0x%08X\n", g_target_process.pid);
     return -1;
 }
 
-int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type) {
-    if (pid <= 0) return -1;
-
+int kernel_set_watchpoint(uint32_t address, WatchPointBreakType type) {
     int index = find_empty_slot(0, SINGLE_STEP_SLOT);
     if (index == -1) return -1;
 
@@ -77,24 +80,24 @@ int kernel_set_watchpoint(SceUID pid, uint32_t address, WatchPointBreakType type
     }
 
     uint32_t WCR = (1 << 0) | (0x3 << 1) | (LSC << 3) | (0xF << 5) | (0x1 << 14);
-    int ret = ksceKernelSetPHWP(pid, index, (void *)address, WCR);
+    int ret = ksceKernelSetPHWP(g_target_process.pid, index, (void *)address, WCR);
 
     if (ret >= 0) {
         ActiveBKPTSlot *slot = &g_active_slot[index];
-        slot->pid = pid;
+        slot->pid = g_target_process.pid;
         slot->address = address;
         slot->index = index;
         slot->type = (type == BREAK_READ) ? HW_WATCHPOINT_R :
                      (type == BREAK_WRITE) ? HW_WATCHPOINT_W : HW_WATCHPOINT_RW;
-        ksceDebugPrintf("Watchpoint set for PID 0x%08X in slot %d\n", pid, index);
+        ksceDebugPrintf("Watchpoint set for PID 0x%08X in slot %d\n", g_target_process.pid, index);
         return ret;
     }
-    ksceDebugPrintf("Failed to set watchpoint for PID 0x%08X\n", pid);
+    ksceDebugPrintf("Failed to set watchpoint for PID 0x%08X\n", g_target_process.pid);
     return -1;
 }
 
-int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type) {
-    if (pid <= 0 || (type != SW_BREAKPOINT_THUMB && type != SW_BREAKPOINT_ARM))
+int kernel_set_software_breakpoint(uint32_t address, SlotType type) {
+    if ((type != SW_BREAKPOINT_THUMB && type != SW_BREAKPOINT_ARM))
         return -1;
 
     int index = find_empty_slot(MAX_HW_BKPT, MAX_SLOT);
@@ -104,22 +107,22 @@ int kernel_set_software_breakpoint(SceUID pid, uint32_t address, SlotType type) 
     uint8_t instruction_size = (type == SW_BREAKPOINT_THUMB) ? 2 : 4;
     uint32_t original_instruction = 0;
 
-    int read_ret = ksceKernelCopyFromUserProc(pid, &original_instruction, (void *)address, instruction_size);
+    int read_ret = ksceKernelCopyFromUserProc(g_target_process.pid, &original_instruction, (void *)address, instruction_size);
     if (read_ret < 0) return read_ret;
     
-    int write_ret = ksceKernelCopyToUserProcTextDomain(pid, (void *)address, &bkpt_instruction, instruction_size);
+    int write_ret = ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)address, &bkpt_instruction, instruction_size);
     if (write_ret < 0) {
-        ksceKernelCopyToUserProcTextDomain(pid, (void *)address, &original_instruction, instruction_size);
+        ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)address, &original_instruction, instruction_size);
         return write_ret;
     }
 
     ActiveBKPTSlot *slot = &g_active_slot[index];
-    slot->pid = pid;
+    slot->pid = g_target_process.pid;
     slot->address = address;
     slot->index = index;
     slot->p_instruction = original_instruction;
     slot->type = type;
-    ksceDebugPrintf("Software breakpoint set for PID 0x%08X in slot %d\n", pid, index);
+    ksceDebugPrintf("Software breakpoint set for PID 0x%08X in slot %d\n", g_target_process.pid, index);
     return write_ret;
 }
 
@@ -194,20 +197,23 @@ int kernel_get_callstack(uint32_t *user_dst, int depth) {
     return copy_ret < 0 ? copy_ret : current_depth;
 }
 
-int kernel_suspend_process(SceUID pid) {
-    return (pid <= 0) ? -1 : ksceKernelSuspendProcess(pid, 0x1C);
+int kernel_get_moduleinfo(SceKernelModuleInfo *module_info) {
+    return (module_info == NULL) ? ksceDebugPrintf("Attach to a process first to use GET_MODULEINFO.") : ksceKernelGetModuleInfo(g_target_process.pid, g_target_process.main_module_id, (void *)module_info);
 }
 
-int kernel_resume_process(SceUID pid) {
+int kernel_suspend_process(void) {
+    return (g_target_process.pid <= 0) ? ksceDebugPrintf("Attach to a process first to use SUSPEND.") : ksceKernelSuspendProcess(g_target_process.pid, 0x1C);
+}
+
+int kernel_resume_process(void) {
     ThreadCpuRegisters availability_check;
     if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &availability_check) < 0) {
         ksceDebugPrintf("Let a breakpoint be triggered first to use RESUME.");
         return -1;
     }
 
-    if (pid <= 0) return -1;
     ksceKernelChangeThreadSuspendStatus(g_target_process.exception_thid, 2);
-    ksceKernelResumeProcess(pid);
+    ksceKernelResumeProcess(g_target_process.pid);
     return 0;
 }
 
@@ -366,6 +372,8 @@ int module_start(void) {
 
     g_heap_uid = ksceKernelCreateHeap("pebbleHeap", 0x4000, NULL);
     if (g_heap_uid < 0) return SCE_KERNEL_START_FAILED;
+
+    kernel_debugger_init();
 
     return SCE_KERNEL_START_SUCCESS;
 }
