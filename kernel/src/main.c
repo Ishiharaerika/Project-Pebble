@@ -6,6 +6,8 @@
 
 TargetProcess g_target_process;
 ActiveBKPTSlot g_active_slot[MAX_SLOT];
+MemReadBuffer g_memread_buffer;
+SceUID g_heap_uid = -1;
 
 int module_get_export_func(SceUID pid, const char *modname, uint32_t libnid, uint32_t funcnid, uintptr_t *func);
 int (*ksceKernelSetTHBP)(SceUID thid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
@@ -145,12 +147,12 @@ int kernel_clear_breakpoint(int index) {
 
 int kernel_list_breakpoints(ActiveBKPTSlot *user_dst) {
     if (user_dst == NULL) return -2;
-    return ksceKernelCopyToUserProcTextDomain(ksceKernelGetProcessId(), (void *)user_dst, &g_active_slot, sizeof(ActiveBKPTSlot));
+    return ksceKernelCopyToUserProc(g_target_process.pid, (void *)user_dst, &g_active_slot, sizeof(ActiveBKPTSlot));
 }
 
 int kernel_get_registers(SceArmCpuRegisters *user_dst) {
     if (user_dst == NULL) return -2;
-    return ksceKernelCopyToUserProcTextDomain(ksceKernelGetProcessId(), (void *)user_dst, &current_registers, sizeof(SceArmCpuRegisters));
+    return ksceKernelCopyToUserProc(g_target_process.pid, (void *)user_dst, &current_registers, sizeof(SceArmCpuRegisters));
 }
 
 int kernel_get_callstack(uint32_t *user_dst, int depth) {
@@ -159,7 +161,7 @@ int kernel_get_callstack(uint32_t *user_dst, int depth) {
     
     ThreadCpuRegisters availability_check;
     if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &availability_check) < 0) {
-        ksceDebugPrintf("Let a BKPT be triggered first to use get_callstack.");
+        ksceDebugPrintf("Let a breakpoint be triggered first to use get_callstack.");
         return -1;
     }
 
@@ -199,7 +201,7 @@ int kernel_suspend_process(SceUID pid) {
 int kernel_resume_process(SceUID pid) {
     ThreadCpuRegisters availability_check;
     if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &availability_check) < 0) {
-        ksceDebugPrintf("Let a BKPT be triggered first to use RESUME.");
+        ksceDebugPrintf("Let a breakpoint be triggered first to use RESUME.");
         return -1;
     }
 
@@ -214,7 +216,7 @@ int kernel_single_step(void) {
         return -1;
 
     if (ksceKernelGetThreadCpuRegisters(g_target_process.exception_thid, &all_registers) < 0) {
-        ksceDebugPrintf("Let a BKPT be triggered first to use STEP.");
+        ksceDebugPrintf("Let a breakpoint be triggered first to use STEP.");
         return -1;
     }
 
@@ -318,6 +320,39 @@ int kernel_single_step(void) {
     return ret;
 }
 
+int kernel_read_memory(const void *user_src) {
+    if (user_src == NULL) return -2;
+    return ksceKernelCopyFromUserProc(g_target_process.pid, g_memread_buffer.memread, (const void *)user_src, 512);
+}
+
+int kernel_write_memory(void *user_dst, const void *user_modification, SceSize memwrite_len) {
+    if (!user_dst || !memwrite_len) return -2;
+
+    void *buf = ksceKernelAllocHeapMemory(g_heap_uid, memwrite_len);
+    if (!buf) return -2;
+
+    int ret = ksceKernelCopyFromUserProc(g_target_process.pid, buf, user_modification, memwrite_len);
+    if (ret >= 0)
+        ret = ksceKernelCopyToUserProc(g_target_process.pid, user_dst, buf, memwrite_len);
+    
+    ksceKernelFreeHeapMemory(g_heap_uid, buf);
+    return ret;
+}
+
+int kernel_write_instruction(void *user_dst, const void *user_modification, SceSize memwrite_len) {
+    if (!user_dst || !memwrite_len) return -2;
+
+    void *buf = ksceKernelAllocHeapMemory(g_heap_uid, memwrite_len);
+    if (!buf) return -2;
+
+    int ret = ksceKernelCopyFromUserProc(g_target_process.pid, buf, user_modification, memwrite_len);
+    if (ret >= 0)
+        ret = ksceKernelCopyToUserProcTextDomain(g_target_process.pid, user_dst, buf, memwrite_len);
+    
+    ksceKernelFreeHeapMemory(g_heap_uid, buf);
+    return ret;
+}
+
 void _start() __attribute__ ((weak, alias("module_start")));
 int module_start(void) {
     if (module_get_export_func(0x10005, "SceKernelThreadMgr", THREADMGR_NID, SETTHBP_NID, (uintptr_t *)&ksceKernelSetTHBP) < 0 ||
@@ -329,6 +364,9 @@ int module_start(void) {
     for (int i = 0; i < MAX_SLOT; ++i) clear_slot(&g_active_slot[i]);
     if(register_handler() < 0) return -1;
 
+    g_heap_uid = ksceKernelCreateHeap("pebbleHeap", 0x4000, NULL);
+    if (g_heap_uid < 0) return SCE_KERNEL_START_FAILED;
+
     return SCE_KERNEL_START_SUCCESS;
 }
 
@@ -338,5 +376,8 @@ int module_stop(void) {
             kernel_clear_breakpoint(i);
         }
     }
+
+    if (g_heap_uid >= 0) ksceKernelDeleteHeap(g_heap_uid);
+
     return SCE_KERNEL_STOP_SUCCESS;
 }
