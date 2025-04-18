@@ -327,7 +327,7 @@ int module_start(void) {
     }
 
     for (int i = 0; i < MAX_SLOT; ++i) clear_slot(&g_active_slot[i]);
-    if(register_handler(void) < 0) return -1;
+    if(register_handler() < 0) return -1;
 
     return SCE_KERNEL_START_SUCCESS;
 }
