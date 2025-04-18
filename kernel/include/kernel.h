@@ -21,8 +21,15 @@
 #define THREADMGR_NID 0xE2C40624
 #define PROCESSMGR_NID 0x7A69DE86
 #define SETTHBP_NID 0x385831A1
+#define GETTHBP_NID 0x453B764A
 #define SETPHWP_NID 0x54D7B16A
+#define GETPHWP_NID 0xC55BF6C3
 #define SETPHBP_NID 0x59FA3216
+#define GETPHBP_NID 0xA9C20202
+
+typedef struct {
+  uint8_t memread[512];
+} MemReadBuffer;
 
 typedef enum {
   SLOT_NONE = 0,
@@ -60,6 +67,7 @@ extern TargetProcess g_target_process;
 extern ActiveBKPTSlot g_active_slot[MAX_SLOT];
 extern SceThreadCpuRegisters all_registers;
 extern SceArmCpuRegisters current_registers;
+extern SceUID g_heap_uid;
 
 int kernel_debugger_attach(SceUID pid);
 int kernel_set_hardware_breakpoint(SceUID pid, uint32_t address);
@@ -72,4 +80,7 @@ int kernel_get_callstack(uint32_t *user_dst, int depth);
 int kernel_suspend_process(SceUID pid);
 int kernel_resume_process(SceUID pid);
 int kernel_single_step(void);
+int kernel_read_memory(const void *user_src);
+int kernel_write_memory(void *user_dst, const void *user_modification, SceSize memwrite_len);
+int kernel_write_instruction(void *user_dst, const void *user_modification, SceSize memwrite_len);
 int register_handler(void);
