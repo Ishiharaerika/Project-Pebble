@@ -1,8 +1,8 @@
 #include "kernel.h"
 
-void handler_asm_pabt(void);
-void handler_asm_dabt(void);
-void handler_asm_undef(void);
+extern void handler_asm_pabt(void);
+extern void handler_asm_dabt(void);
+extern void handler_asm_undef(void);
 SceThreadCpuRegisters all_registers;
 SceArmCpuRegisters current_registers;
 
