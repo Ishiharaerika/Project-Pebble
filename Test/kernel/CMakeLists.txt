@@ -21,15 +21,15 @@ target_link_libraries(pebble
   SceCtrlForDriver_stub
   SceDebugForDriver_stub
   SceSysmemForDriver_stub
-  SceSysmemForKernel_stub
   SceDisplayForDriver_stub
   SceSysclibForDriver_stub
-  SceExcpmgrForKernel_stub
-  SceThreadmgrForKernel_stub
   SceThreadmgrForDriver_stub
-  SceModulemgrForKernel_stub
   SceIofilemgrForDriver_stub
-  SceProcessmgrForKernel_stub
+  SceSysmemForKernel_stub_weak
+  SceExcpmgrForKernel_stub_weak
+  SceThreadmgrForKernel_stub_weak
+  SceModulemgrForKernel_stub_weak
+  SceProcessmgrForKernel_stub_weak
   #SceSysrootForKernel_stub
   #SceProcEventForDriver_stub
 )
