@@ -1,0 +1,35 @@
+pebble:
+  attributes: 0
+  version:
+    major: 1
+    minor: 0
+  main:
+    start: _start
+  #  stop: module_stop
+  #libraries:
+  #  pebble_kernel:
+  #    syscall: true
+  #    functions:
+  #    - kernel_debugger_attach
+  #    - kernel_debugger_init
+  #    - kernel_set_hardware_breakpoint
+  #    - kernel_set_watchpoint
+  #    - kernel_set_software_breakpoint
+  #    - kernel_clear_breakpoint
+  #    - kernel_list_breakpoints
+  #    - kernel_get_registers
+  #    - kernel_get_callstack
+  #    - kernel_get_modulelist
+  #    - kernel_get_moduleinfo
+  #    - kernel_suspend_process
+  #    - kernel_resume_process
+  #    - kernel_single_step
+  #    - kernel_read_memory
+  #    - kernel_write_memory
+  #    - kernel_write_instruction
+  #    - kernel_wait_event
+  #    - renderer_setFB
+  #    - renderer_writeFromVFB
+  #    - rendererv_drawString
+  #    - rendererv_drawStringF
+  #    - rendererv_drawRectangle
