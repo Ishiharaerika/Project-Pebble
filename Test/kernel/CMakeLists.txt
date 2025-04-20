@@ -17,7 +17,7 @@ add_executable(pebble
 
 target_link_libraries(pebble
   taihenModuleUtils_stub
-  SceLibc_stub
+  SceLibc_stub_weak
   SceCtrlForDriver_stub
   SceDebugForDriver_stub
   SceSysmemForDriver_stub
