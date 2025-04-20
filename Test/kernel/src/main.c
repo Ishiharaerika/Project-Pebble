@@ -162,7 +162,7 @@ int kernel_clear_breakpoint(int index) {
 
 int kernel_list_breakpoints(ActiveBKPTSlot *dst) {
     if (dst == NULL) return -2;
-    memcpy(dst, &g_active_slot, sizeof(g_active_slot));
+    memcpy(dst, g_active_slot, sizeof(g_active_slot));
 
     return 0;
 }
