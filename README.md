@@ -37,9 +37,13 @@ Currently developing. Please open an issue for ideas or bugs.**
 1.  Clone or download the repository.
 2.  Navigate to kernel/.
 3.  One-Liner:
-    ```bash
+    ```
     mkdir build && cd build && cmake .. && make
     ```
+3.1. Furthermore One-Liner (ensure you're under build/):
+   ```
+   cd .. && rm -r build && mkdir build && cd build && cmake .. && clear && make
+   ```
 
 This generates the kernel module `pebble_k.skprx`.
 
