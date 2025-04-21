@@ -221,13 +221,12 @@ static void handle_memview_input(uint32_t released, uint32_t current)
 
 static void draw_ui(void)
 {
-    rendererv_drawRectangle(0, 0, 960, 544, 0x80171717);
-    ksceKernelPrintf("Success checkpoint 8888.\n");
+    rendererv_drawRectangle(0, 0, 960, 544, 0x80171717); // This showing no visual effect. 
 
     switch (guistate.ui_state)
     {
     case UI_WELCOME: {
-        rendererv_drawString(100, 80, "Welcome to PebbleVita Debugger!!!");
+        rendererv_drawString(100, 80, "Welcome to Pebble Vita Debugger!!!"); // This hangs the kernel...
 
         if (g_target_process.pid > 0)
         {
