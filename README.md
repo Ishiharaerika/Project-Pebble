@@ -25,7 +25,7 @@ Currently developing. Please open an issue for ideas or bugs.**
 * **Exception Handling:** Catches Prefetch Abort (PABT), Data Abort (DABT), and Undefined Instruction exceptions within the target process.
 
 ## Future/Roadmap
-* **Implement user-interface for GUI debugging.**
+* **Wait a sec!!!**
 
 ## Prerequisites
 
