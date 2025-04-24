@@ -39,28 +39,24 @@ static void save_hotkeys(void)
 
 static void update_memview_state(void)
 {
-    guistate.has_active_bp = false;
     kernel_list_breakpoints(guistate.breakpoints);
+    guistate.has_active_bp = false;
     for (int i = 0; i < MAX_SLOT; i++)
     {
         if (guistate.breakpoints[i].type)
         {
             guistate.has_active_bp = true;
+            kernel_get_registers(&guistate.regs);
+            guistate.stack_size =
+                kernel_read_memory((void *)guistate.regs.sp, guistate.stack, sizeof(guistate.stack)) / 4;
+            if (guistate.stack_size < 0)
+                guistate.stack_size = 0;
+            guistate.callstack_size = MAX_CALL_STACK_DEPTH;
+            kernel_get_callstack(guistate.callstack, guistate.callstack_size);
             break;
         }
     }
-    if (guistate.has_active_bp)
-    {
-        kernel_get_registers(&guistate.regs);
-        guistate.stack_size = kernel_read_memory((void *)guistate.regs.sp, guistate.stack, sizeof(guistate.stack));
-        if (guistate.stack_size > 0)
-            guistate.stack_size /= 4;
-        else
-            guistate.stack_size = 0;
-        guistate.callstack_size = MAX_CALL_STACK_DEPTH;
-        kernel_get_callstack(guistate.callstack, guistate.callstack_size);
-    }
-    else
+    if (!guistate.has_active_bp)
     {
         memset(&guistate.regs, 0, sizeof(guistate.regs));
         guistate.stack_size = 0;
@@ -81,22 +77,20 @@ static void draw_hex_row(uint32_t addr, const uint8_t *data)
     char ascii[9];
     const MemLayoutInfo *layout = &layout_info[guistate.mem_layout];
     uint32_t pos = snprintf(line, sizeof(line), "%08X ", addr);
-    uint32_t val = 0;
-    uint8_t c = 0;
-    if (data != NULL && pos < sizeof(line) - 1 && addr >= start_addr)
+    if (data && pos < sizeof(line) - 1 && addr >= start_addr)
     {
-        for (uint8_t i = 0; i < 8; i += layout->bytes)
+        for (int i = 0; i < 8; i += layout->bytes)
         {
             if (pos >= sizeof(line) - (layout->bytes * 2 + 2))
                 break;
-            val = 0;
+            uint32_t val = 0;
             memcpy(&val, data + i, layout->bytes);
             pos += snprintf(line + pos, sizeof(line) - pos, " %0*X", layout->bytes * 2, val);
-            for (uint8_t j = 0; j < layout->bytes; j++)
+            for (int j = 0; j < layout->bytes; j++)
             {
                 if (i + j < 8)
                 {
-                    c = data[i + j];
+                    uint8_t c = data[i + j];
                     ascii[i + j] = (c > 31 && c < 127) ? c : '.';
                 }
             }
@@ -106,57 +100,18 @@ static void draw_hex_row(uint32_t addr, const uint8_t *data)
     else
     {
         if (pos < sizeof(line) - 1)
-        {
-            size_t remaining_space = sizeof(line) - pos - 1;
-            const char *error_msg = " Read Error";
-            size_t error_len = strlen(error_msg);
-            size_t copy_len = (error_len < remaining_space) ? error_len : remaining_space;
-            memcpy(line + pos, error_msg, copy_len);
-            line[pos + copy_len] = '\0';
-        }
+            strcpy(line + pos, " Read Error");
         memset(ascii, '.', 8);
         ascii[8] = '\0';
     }
-    const int ypos = 10 + ((addr - guistate.base_addr) / 8) * FONT_HEIGHT;
+    const int ypos = 20 + ((addr - guistate.base_addr) / 8) * FONT_HEIGHT;
+    if (addr == guistate.addr)
+        renderer_drawRectangle(0, ypos, 400, FONT_HEIGHT, 0x80FFFFFF);
+
     char final_line[128];
     snprintf(final_line, sizeof(final_line), "%s  %s", line, ascii);
     renderer_drawString(0, ypos, final_line);
-    if (addr >= guistate.base_addr && addr < guistate.base_addr + ((UI_HEIGHT - FONT_HEIGHT) / FONT_HEIGHT) * 8)
-    {
-        if (addr >= start_addr && addr == guistate.addr)
-        {
-            int underline_x = 0;
-            int underline_w = 0;
-            int underline_y = ypos + FONT_HEIGHT - 2;
-            int underline_h = 1;
-            if (guistate.edit_mode == EDIT_NONE)
-            {
-                if (guistate.cursor_column == 0) // Address column
-                {
-                    underline_x = 0;
-                    underline_w = 8 * FONT_WIDTH;
-                }
-                else // Hex column
-                {
-                    underline_x = (10 + ((addr % 8) / layout->bytes) * (layout->bytes * 2 + 1)) * FONT_WIDTH;
-                    underline_w = layout->bytes * 2 * FONT_WIDTH;
-                }
-            }
-            else // Edit mode (ADDRESS or VALUE)
-            {
-                underline_w = FONT_WIDTH; // Single digit width
-                if (guistate.edit_mode == EDIT_ADDRESS)
-                    underline_x = guistate.edit_offset * FONT_WIDTH;
-                else // EDIT_VALUE
-                {
-                    int base_hex_x = (10 + ((addr % 8) / layout->bytes) * (layout->bytes * 2 + 1)) * FONT_WIDTH;
-                    underline_x = base_hex_x + guistate.edit_offset * FONT_WIDTH;
-                }
-            }
-                renderer_drawRectangle(underline_x, underline_y, underline_w, underline_h, 0xFFFFFFFF);
-            }
-        }
-    }
+}
 
 static void draw_registers(int x, int y)
 {
@@ -176,11 +131,6 @@ static void handle_feature_input(uint32_t released)
     switch (guistate.ui_state)
     {
     case UI_FEATURES: {
-        if (released & (SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER))
-        {
-            guistate.ui_state = UI_MEMVIEW;
-            return;
-        }
         int cur_feat = guistate.edit_feature;
         if (released & SCE_CTRL_UP)
             cur_feat = (cur_feat - 1 + 8) % 8;
@@ -275,7 +225,7 @@ static void handle_feature_input(uint32_t released)
         if (released & SCE_CTRL_DOWN)
             cur_idx = (cur_idx + 1) % 5;
         guistate.edit_feature = cur_idx;
-        uint32_t *key_ptr = (uint32_t *)&((uint32_t *)&guistate.hotkeys)[cur_idx];
+        uint32_t *key_ptr = (uint32_t *)&((uint32_t *)&guistate.hotkeys)[cur_idx]; // Pointer to the selected hotkey
         if (released & SCE_CTRL_LEFT)
         {
             if (*key_ptr > 0)
@@ -320,24 +270,10 @@ static void handle_memview_input(uint32_t released, uint32_t current)
     }
     if (guistate.active_area == MEMVIEW_HEX)
     {
-        int layout_changed = 0;
+        bool layout_changed = false;
+        uint32_t prev_addr = guistate.addr;
         const MemLayoutInfo *layout = &layout_info[guistate.mem_layout];
         int layout_bytes = layout->bytes;
-        uint32_t module_end_addr = 0;
-        uint32_t seg_start;
-        uint32_t seg_end;
-        for (uint8_t i = 0; i < 4; ++i)
-        {
-            if (guistate.modinfo.segments[i].vaddr != NULL && guistate.modinfo.segments[i].memsz > 0)
-            {
-                seg_start = (uint32_t)guistate.modinfo.segments[i].vaddr;
-                seg_end = seg_start + guistate.modinfo.segments[i].memsz;
-                if (seg_end > module_end_addr)
-                    module_end_addr = seg_end;
-            }
-        }
-        if (module_end_addr == 0)
-            module_end_addr = 0xFFFFFFFF;
         if (released & guistate.hotkeys.edit)
         {
             guistate.edit_mode = (guistate.edit_mode + 1) % 3;
@@ -345,136 +281,78 @@ static void handle_memview_input(uint32_t released, uint32_t current)
             {
                 guistate.modified_addr = guistate.addr;
                 kernel_read_memory((void *)guistate.addr, guistate.modified_value, layout_bytes);
-                if (guistate.cursor_column == 0)
-                {
-                    guistate.edit_mode = EDIT_ADDRESS;
-                    guistate.edit_offset = 7;
-                }
-                else
-                {
-                    guistate.edit_mode = EDIT_VALUE;
-                    guistate.edit_offset = (layout_bytes * 2) - 1;
-                }
+                guistate.edit_offset = 0;
             }
-            else
-                guistate.cursor_column = 1;
         }
         if (released & SCE_CTRL_L1)
         {
             guistate.mem_layout = (guistate.mem_layout + 2) % 3;
-            layout_changed = 1;
+            layout_changed = true;
         }
         if (released & SCE_CTRL_R1)
         {
             guistate.mem_layout = (guistate.mem_layout + 1) % 3;
-            layout_changed = 1;
+            layout_changed = true;
         }
         if (layout_changed && guistate.edit_mode != EDIT_NONE)
         {
             kernel_read_memory((void *)guistate.addr, guistate.modified_value, layout_info[guistate.mem_layout].bytes);
-            guistate.edit_offset = (layout_info[guistate.mem_layout].bytes * 2) - 1;
+            guistate.edit_offset = 0;
         }
         if (guistate.edit_mode == EDIT_ADDRESS)
         {
-            int max_offset = 7;
-            if (released & SCE_CTRL_LEFT)
-                guistate.edit_offset = (guistate.edit_offset - 1 + max_offset + 1) % (max_offset + 1);
-            if (released & SCE_CTRL_RIGHT)
-                guistate.edit_offset = (guistate.edit_offset + 1) % (max_offset + 1);
-            int delta = 0;
-            uint32_t power = 1;
-            for (uint8_t i = 0; i < (max_offset - guistate.edit_offset); ++i)
-                power *= 16;
-            if (released & SCE_CTRL_UP)
-                delta = power;
-            if (released & SCE_CTRL_DOWN)
-                delta = -power;
-            if (delta != 0)
+            int delta = (released & SCE_CTRL_UP ? 0x10 : 0) - (released & SCE_CTRL_DOWN ? 0x10 : 0) +
+                        (released & SCE_CTRL_RIGHT ? layout_bytes : 0) - (released & SCE_CTRL_LEFT ? layout_bytes : 0);
+            if (delta)
             {
-                uint32_t temp_addr = guistate.modified_addr + delta;
-                if (temp_addr >= start_addr && temp_addr < module_end_addr)
-                    guistate.modified_addr = temp_addr;
+                guistate.modified_addr =
+                    CLAMP(guistate.modified_addr + delta, (uint32_t)guistate.modinfo.segments[0].vaddr,
+                          (uint32_t)guistate.modinfo.segments[0].vaddr + guistate.modinfo.size - layout_bytes);
+                kernel_read_memory((void *)guistate.modified_addr, guistate.modified_value, layout_bytes);
+                guistate.edit_offset = 0;
             }
             if (released & guistate.hotkeys.confirm)
             {
                 guistate.addr = guistate.modified_addr;
-                guistate.base_addr = guistate.addr;
-                read_memview_cache();
                 guistate.edit_mode = EDIT_NONE;
-                guistate.cursor_column = 0;
+                if ((guistate.addr & ~0xFF) != (prev_addr & ~0xFF))
+                {
+                    guistate.base_addr = guistate.addr & ~0xFF;
+                    read_memview_cache();
+                }
             }
         }
         else if (guistate.edit_mode == EDIT_VALUE)
         {
-            int max_offset = (layout_bytes * 2) - 1;
+            SceSize size = layout_bytes;
             if (released & SCE_CTRL_LEFT)
-                guistate.edit_offset = (guistate.edit_offset - 1 + max_offset + 1) % (max_offset + 1);
+                guistate.edit_offset = (guistate.edit_offset - 1 + size) % size;
             if (released & SCE_CTRL_RIGHT)
-                guistate.edit_offset = (guistate.edit_offset + 1) % (max_offset + 1);
-            int delta = 0;
-            int byte_idx = (max_offset - guistate.edit_offset) / 2;
-            int nibble_idx = (max_offset - guistate.edit_offset) % 2;
-            if (released & SCE_CTRL_UP)
-                delta = 1;
-            if (released & SCE_CTRL_DOWN)
-                delta = -1;
-            if (delta != 0)
-            {
-                uint8_t current_byte = guistate.modified_value[byte_idx];
-                uint8_t nibble = (nibble_idx == 0) ? (current_byte & 0x0F) : ((current_byte >> 4) & 0x0F);
-                nibble = (nibble + delta + 16) % 16;
-                if (nibble_idx == 0)
-                    current_byte = (current_byte & 0xF0) | nibble;
-                else
-                    current_byte = (current_byte & 0x0F) | (nibble << 4);
-                guistate.modified_value[byte_idx] = current_byte;
-            }
+                guistate.edit_offset = (guistate.edit_offset + 1) % size;
+            int delta = (released & SCE_CTRL_UP ? 1 : (released & SCE_CTRL_DOWN ? -1 : 0));
+            if (delta)
+                guistate.modified_value[guistate.edit_offset] += delta;
             if (released & guistate.hotkeys.confirm)
             {
-                kernel_write_memory((void *)guistate.addr, guistate.modified_value, layout_bytes);
+                kernel_write_memory((void *)guistate.addr, guistate.modified_value, size);
                 guistate.edit_mode = EDIT_NONE;
-                guistate.cursor_column = 1;
                 read_memview_cache();
             }
         }
-        else // EDIT_NONE
+        else
         {
-            int dx = (released & SCE_CTRL_RIGHT ? 1 : 0) - (released & SCE_CTRL_LEFT ? 1 : 0);
-            int dy = (released & SCE_CTRL_DOWN ? 1 : 0) - (released & SCE_CTRL_UP ? 1 : 0);
-            if (dx != 0)
+            int delta = (released & SCE_CTRL_UP ? -8 : 0) + (released & SCE_CTRL_DOWN ? 8 : 0) +
+                        (released & SCE_CTRL_RIGHT ? layout_bytes : 0) - (released & SCE_CTRL_LEFT ? layout_bytes : 0);
+            if (delta)
             {
-                guistate.cursor_column = (guistate.cursor_column + dx + 2) % 2; // Toggle 0 and 1 for Addr/Hex
-            }
-            if (dy != 0)
-            {
-                int delta = dy > 0 ? 8 : -8;
-                uint32_t new_addr = guistate.addr + delta;
-                if (new_addr >= start_addr && new_addr < module_end_addr - layout_bytes)
+                guistate.addr =
+                    CLAMP(guistate.addr + delta, (uint32_t)guistate.modinfo.segments[0].vaddr,
+                          (uint32_t)guistate.modinfo.segments[0].vaddr + guistate.modinfo.size - layout_bytes);
+                if ((guistate.addr & ~0xFF) != (guistate.base_addr))
                 {
-                    guistate.addr = new_addr;
-                    const int visible_lines = (UI_HEIGHT - FONT_HEIGHT) / FONT_HEIGHT;
-                    uint32_t last_visible_addr = guistate.base_addr + (visible_lines - 1) * 8;
-                    if (guistate.addr < guistate.base_addr)
-                    {
-                        guistate.base_addr += delta;
-                        if (guistate.base_addr < start_addr)
-                            guistate.base_addr = start_addr;
-                        read_memview_cache();
-                    }
-                    else if (guistate.addr > last_visible_addr)
-                    {
-                        guistate.base_addr += delta;
-                        read_memview_cache();
-                    }
+                    guistate.base_addr = guistate.addr & ~0xFF;
+                    read_memview_cache();
                 }
-            }
-        }
-        if (released & guistate.hotkeys.cancel)
-        {
-            if (guistate.edit_mode != EDIT_NONE)
-            {
-                guistate.edit_mode = EDIT_NONE;
-                guistate.cursor_column = (guistate.edit_mode == EDIT_ADDRESS) ? 0 : 1;
             }
         }
         if (released & SCE_CTRL_TRIANGLE)
@@ -488,6 +366,11 @@ static void handle_memview_input(uint32_t released, uint32_t current)
             guistate.view_state = (guistate.view_state - 1 + 3) % 3;
         if (released & SCE_CTRL_RIGHT)
             guistate.view_state = (guistate.view_state + 1) % 3;
+    }
+    if (released & guistate.hotkeys.cancel)
+    {
+        if (guistate.edit_mode != EDIT_NONE)
+            guistate.edit_mode = EDIT_NONE;
     }
 }
 
@@ -509,6 +392,7 @@ void draw_gui(void)
             renderer_drawString(100, 140, "Nothing's here...");
         break;
     case UI_MEMVIEW: {
+        renderer_setColor(0xFFFFFFFF);
         const int visible_lines = (UI_HEIGHT - FONT_HEIGHT) / FONT_HEIGHT;
         renderer_setColor(0x80808080);
         if (guistate.active_area == MEMVIEW_HEX)
@@ -545,19 +429,19 @@ void draw_gui(void)
                 switch (guistate.view_state)
                 {
                 case VIEW_STACK:
-                    for (uint32_t i = 0; i < guistate.stack_size && i < 16; i++, y_pos += FONT_HEIGHT)
+                    for (int i = 0; i < guistate.stack_size && i < 16; i++, y_pos += FONT_HEIGHT)
                         renderer_drawStringF(right_panel_x, y_pos, "%08X:%08X", guistate.regs.sp + i * 4,
                                              guistate.stack[i]);
                     break;
                 case VIEW_CALLSTACK:
-                    for (uint32_t i = 0; i < guistate.callstack_size && i < MAX_CALL_STACK_DEPTH; i++, y_pos += FONT_HEIGHT)
+                    for (int i = 0; i < guistate.callstack_size && i < MAX_CALL_STACK_DEPTH; i++, y_pos += FONT_HEIGHT)
                         renderer_drawStringF(right_panel_x, y_pos, "[%d] %08X", i, guistate.callstack[i]);
                     break;
                 case VIEW_BREAKPOINTS: {
                     const char *types[] = {"SW-Thumb", "SW-Arm", "Hardware",  "WP-Read",
                                            "WP-Write", "WP-RW",  "SingleStep"};
                     const int num_types = sizeof(types) / sizeof(types[0]);
-                    for (uint8_t i = 0; i < MAX_SLOT; i++, y_pos += FONT_HEIGHT)
+                    for (int i = 0; i < MAX_SLOT; i++, y_pos += FONT_HEIGHT)
                     {
                         ActiveBKPTSlot *bp = &guistate.breakpoints[i];
                         if (bp->type)
@@ -682,24 +566,14 @@ int pebble_thread(SceSize args, void *argp)
                 {
                     guistate.gui_visible = false;
                     renderer_destroy();
-                    ksceKernelDebugResumeThread(g_target_process.main_thread_id, 0x100);
                 }
                 else
                 {
-                    if (g_target_process.main_thread_id)
+                    if (renderer_init() == 0)
                     {
-                        if (renderer_init() == 0)
-                        {
-                            guistate.gui_visible = true;
-                            ksceKernelDebugSuspendThread(g_target_process.main_thread_id, 0x100);
-                            if (guistate.ui_state == UI_MEMVIEW)
-                                read_memview_cache();
-                        }
-                    }
-                    else
-                    {
-                        kernel_debugger_on_create();
-                        continue;
+                        guistate.gui_visible = true;
+                        if (guistate.ui_state == UI_MEMVIEW)
+                            read_memview_cache();
                     }
                 }
             }
@@ -721,30 +595,31 @@ int pebble_thread(SceSize args, void *argp)
                     {
                         if (released & guistate.hotkeys.confirm)
                         {
+                            kernel_debugger_attach();
                             SceKernelModuleInfo info = {.size = sizeof(SceKernelModuleInfo)};
                             if (kernel_get_moduleinfo(&info) >= 0)
                             {
                                 guistate.modinfo = info;
                                 uint32_t lowest_vaddr = 0;
                                 uint32_t temp;
-                                for (int i = 0; i < 4; ++i)
+
+                                for (int i = 0; i < 4; ++i) 
                                 {
-                                    if (info.segments[i].vaddr != NULL)
+                                    if (info.segments[i].vaddr != NULL) 
                                     {
                                         temp = (uint32_t)info.segments[i].vaddr;
                                         if (lowest_vaddr == 0 || temp < lowest_vaddr)
                                             lowest_vaddr = temp;
                                     }
                                 }
-                                if (lowest_vaddr)
+                                if (lowest_vaddr) 
                                 {
                                     guistate.ui_state = UI_MEMVIEW;
                                     guistate.addr = lowest_vaddr;
                                     guistate.base_addr = guistate.addr;
-                                    start_addr = lowest_vaddr;
                                     read_memview_cache();
+                                    start_addr = lowest_vaddr;
                                     lowest_vaddr = 0;
-                                    guistate.active_area = MEMVIEW_HEX;
                                 }
                                 else
                                     start_addr = 0x84000000;
