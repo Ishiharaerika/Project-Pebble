@@ -140,7 +140,7 @@ typedef struct
     ActiveBKPTSlot breakpoints[MAX_SLOT];
     uint8_t modified_value[4], cached_mem[256];
     bool gui_visible, has_active_bp, cursor_column;
-    uint32_t addr, base_addr, modified_addr, edit_feature, stack[64], callstack[MAX_CALL_STACK_DEPTH], stack_size, callstack_size, prev_buttons;
+    uint32_t addr, base_addr, modified_addr, edit_feature, stack[64], callstack[MAX_CALL_STACK_DEPTH], stack_size, callstack_size;
 } State;
 
 typedef struct SceKernelMemBlockInfo

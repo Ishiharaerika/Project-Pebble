@@ -49,8 +49,10 @@ void kernel_debugger_init(void)
 
 int kernel_set_hardware_breakpoint(uint32_t address)
 {
+    if (g_target_process.pid <= 0)
+        return -1;
     int index = find_empty_slot(0, SINGLE_STEP_SLOT);
-    if (index < 0 || g_target_process.pid <= 0)
+    if (index < 0)
         return -1;
     uint32_t BCR = (1 << 0) | (0x3 << 1) | (0xF << 5) | (0x1 << 14) | (0x0 << 20);
     if (ksceKernelSetPHBP(g_target_process.pid, index, (void *)address, BCR) >= 0)
@@ -60,17 +62,17 @@ int kernel_set_hardware_breakpoint(uint32_t address)
         slot->address = address;
         slot->index = index;
         slot->type = HW_BREAKPOINT;
-        ksceKernelPrintf("Hardware breakpoint set for PID %#08X in slot %d\n", g_target_process.pid, index);
         return 0;
     }
-    ksceKernelPrintf("Failed to set hardware breakpoint for PID %#08X\n", g_target_process.pid);
     return -1;
 }
 
 int kernel_set_watchpoint(uint32_t address, WatchPointBreakType type)
 {
+    if (g_target_process.pid <= 0 || type < BREAK_READ || type > BREAK_READ_WRITE)
+        return -1;
     int index = find_empty_slot(0, SINGLE_STEP_SLOT);
-    if (index < 0 || g_target_process.pid <= 0)
+    if (index < 0)
         return -1;
     uint32_t WCR = (1 << 0) | (0x3 << 1) | (type << 3) | (0xF << 5) | (0x1 << 14);
     if (ksceKernelSetPHWP(g_target_process.pid, index, (void *)address, WCR) >= 0)
@@ -82,16 +84,14 @@ int kernel_set_watchpoint(uint32_t address, WatchPointBreakType type)
         slot->type = (type == BREAK_READ)    ? HW_WATCHPOINT_R
                      : (type == BREAK_WRITE) ? HW_WATCHPOINT_W
                                              : HW_WATCHPOINT_RW;
-        ksceKernelPrintf("Watchpoint set for PID %#08X in slot %d\n", g_target_process.pid, index);
         return 0;
     }
-    ksceKernelPrintf("Failed to set watchpoint for PID %#08X\n", g_target_process.pid);
     return -1;
 }
 
 int kernel_set_software_breakpoint(uint32_t address, SlotType type)
 {
-    if ((type != SW_BREAKPOINT_THUMB && type != SW_BREAKPOINT_ARM) || g_target_process.pid <= 0)
+    if (g_target_process.pid <= 0 || (type != SW_BREAKPOINT_THUMB && type != SW_BREAKPOINT_ARM))
         return -1;
     int index = find_empty_slot(MAX_HW_BKPT, MAX_SLOT);
     if (index < 0)
@@ -101,13 +101,12 @@ int kernel_set_software_breakpoint(uint32_t address, SlotType type)
     uint32_t original_instruction = 0;
     if (ksceKernelCopyFromUserProc(g_target_process.pid, &original_instruction, (void *)address, instruction_size) < 0)
         return -1;
-    int ret =
-        ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)address, &bkpt_instruction, instruction_size);
-    if (ret < 0)
+    if (ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)address, &bkpt_instruction, instruction_size) <
+        0)
     {
         ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)address, &original_instruction,
                                            instruction_size);
-        return ret;
+        return -1;
     }
     ActiveBKPTSlot *slot = &guistate.breakpoints[index];
     slot->pid = g_target_process.pid;
@@ -115,8 +114,7 @@ int kernel_set_software_breakpoint(uint32_t address, SlotType type)
     slot->index = index;
     slot->p_instruction = original_instruction;
     slot->type = type;
-    ksceKernelPrintf("Software breakpoint set for PID %#08X in slot %d\n", g_target_process.pid, index);
-    return ret;
+    return 0;
 }
 
 int kernel_clear_breakpoint(int index)
@@ -128,16 +126,27 @@ int kernel_clear_breakpoint(int index)
         return -1;
     SceUID pid = slot->pid;
     int ret = -1;
-    if (slot->type == HW_BREAKPOINT || slot->type == SINGLE_STEP_HW_BREAKPOINT)
-        ret = ksceKernelSetPHBP(pid, slot->index, 0, 0);
-    else if (slot->type >= HW_WATCHPOINT_R && slot->type <= HW_WATCHPOINT_RW)
-        ret = ksceKernelSetPHWP(pid, slot->index, 0, 0);
-    else if (slot->type == SW_BREAKPOINT_THUMB || slot->type == SW_BREAKPOINT_ARM)
+    switch (slot->type)
     {
+    case HW_BREAKPOINT:
+    case SINGLE_STEP_HW_BREAKPOINT:
+        ret = ksceKernelSetPHBP(pid, slot->index, 0, 0);
+        break;
+    case HW_WATCHPOINT_R:
+    case HW_WATCHPOINT_W:
+    case HW_WATCHPOINT_RW:
+        ret = ksceKernelSetPHWP(pid, slot->index, 0, 0);
+        break;
+    case SW_BREAKPOINT_THUMB:
+    case SW_BREAKPOINT_ARM: {
         uint8_t size = (slot->type == SW_BREAKPOINT_THUMB) ? 2 : 4;
-        if (ksceKernelCopyToUserProcTextDomain(pid, (void *)slot->address, &slot->p_instruction, size) >= 0)
-            clear_slot(slot);
+        ret = ksceKernelCopyToUserProcTextDomain(pid, (void *)slot->address, &slot->p_instruction, size);
+        break;
     }
+    default:
+        return -1;
+    }
+    clear_slot(slot);
     return ret;
 }
 
@@ -160,10 +169,10 @@ int kernel_get_registers(SceArmCpuRegisters *dst)
 int kernel_get_callstack(uint32_t *dst, int depth)
 {
     if (!dst || depth <= 0)
-        return -2;
+        return -1;
     if (g_target_process.pid <= 0 || g_target_process.exception_thid <= 0 ||
         ksceKernelIsThreadDebugSuspended(g_target_process.exception_thid) <= 0)
-        return ksceKernelPrintf("Let a breakpoint be triggered first to use GET_CALLSTACK.");
+        return -1;
     uint32_t call_stack_buffer[MAX_CALL_STACK_DEPTH];
     int current_depth = 0;
     int max_depth = (depth < MAX_CALL_STACK_DEPTH) ? depth : MAX_CALL_STACK_DEPTH;
@@ -178,12 +187,12 @@ int kernel_get_callstack(uint32_t *dst, int depth)
                 0 ||
             ksceKernelCopyFromUserProc(g_target_process.pid, &saved_fp, (void *)current_fp, sizeof(saved_fp)) < 0)
             break;
-        if (saved_lr == 0 || saved_fp == current_fp)
+        if (saved_lr == 0 || saved_fp == 0 || saved_fp <= current_fp)
             break;
         call_stack_buffer[current_depth++] = saved_lr;
         current_fp = saved_fp;
     }
-    memcpy(dst, &call_stack_buffer, current_depth * sizeof(uint32_t));
+    memcpy(dst, call_stack_buffer, current_depth * sizeof(uint32_t));
     return current_depth;
 }
 
@@ -234,38 +243,42 @@ void kernel_resume_process(void)
         ksceKernelResumeProcess(g_target_process.pid);
 }
 
-static bool branch_condition(uint32_t cond, uint32_t cpsr)
+static inline bool branch_condition(uint32_t cond, uint32_t cpsr)
 {
+    bool n = (cpsr >> 31) & 1;
+    bool z = (cpsr >> 30) & 1;
+    bool c = (cpsr >> 29) & 1;
+    bool v = (cpsr >> 28) & 1;
     switch (cond)
     {
     case 0:
-        return (cpsr & (1 << 30)) != 0;
+        return z;
     case 1:
-        return (cpsr & (1 << 30)) == 0;
+        return !z;
     case 2:
-        return (cpsr & (1 << 29)) != 0;
+        return c;
     case 3:
-        return (cpsr & (1 << 29)) == 0;
+        return !c;
     case 4:
-        return (cpsr & (1 << 31)) != 0;
+        return n;
     case 5:
-        return (cpsr & (1 << 31)) == 0;
+        return !n;
     case 6:
-        return (cpsr & (1 << 28)) != 0;
+        return v;
     case 7:
-        return (cpsr & (1 << 28)) == 0;
+        return !v;
     case 8:
-        return ((cpsr & (1 << 29)) != 0) && ((cpsr & (1 << 30)) == 0);
+        return c && !z;
     case 9:
-        return ((cpsr & (1 << 29)) == 0) || ((cpsr & (1 << 30)) != 0);
+        return !c || z;
     case 10:
-        return (((cpsr >> 31) & 1) == ((cpsr >> 28) & 1));
+        return n == v;
     case 11:
-        return (((cpsr >> 31) & 1) != ((cpsr >> 28) & 1));
+        return n != v;
     case 12:
-        return ((cpsr & (1 << 30)) == 0) && (((cpsr >> 31) & 1) == ((cpsr >> 28) & 1));
+        return !z && (n == v);
     case 13:
-        return ((cpsr & (1 << 30)) != 0) || (((cpsr >> 31) & 1) != ((cpsr >> 28) & 1));
+        return z || (n != v);
     case 14:
         return true;
     case 15:
@@ -373,51 +386,43 @@ int kernel_read_memory(const void *src_addr, void *user_dst, SceSize size)
 
 int kernel_write_memory(void *dst, const void *user_modification, SceSize memwrite_len)
 {
-    if (!dst || !user_modification || !memwrite_len || g_target_process.pid <= 0 || heap_uid < 0)
+    if (!dst || !user_modification || !memwrite_len || g_target_process.pid <= 0)
         return -1;
 
-    void *buf = ksceKernelAllocHeapMemory(heap_uid, memwrite_len);
-    if (!buf)
-        return -1;
-
-    memcpy(buf, user_modification, memwrite_len);
-    int ret = -1;
     uint32_t mem_type = 0;
 
     if (kernel_get_memblockinfo(dst, (uint32_t)&mem_type) >= 0)
     {
         if (mem_type & SCE_KERNEL_MEMBLOCK_TYPE_USER_RX)
-            ret = ksceKernelCopyToUserProcTextDomain(g_target_process.pid, dst, buf, memwrite_len);
+            return ksceKernelCopyToUserProcTextDomain(g_target_process.pid, dst, user_modification, memwrite_len);
         else
-            ret = ksceKernelCopyToUserProc(g_target_process.pid, dst, buf, memwrite_len);
+            return ksceKernelCopyToUserProc(g_target_process.pid, dst, user_modification, memwrite_len);
     }
 
-    ksceKernelFreeHeapMemory(heap_uid, buf);
-    return ret;
+    return -1;
 }
 
 int ksceDisplaySetFrameBufInternal_patched(int head, int index, const SceDisplayFrameBuf *pParam, int sync)
 {
-    if (!head || !g_target_process.pid || !pParam || !pParam->base || (index && isExclusive))
+    if (!head || !pParam || !pParam->base || !guistate.gui_visible || !fb_bases[0] || !fb_bases[1] ||
+        (index != 0 && isExclusive))
         return TAI_CONTINUE(int, g_framebufhook, head, index, pParam, sync);
-    if (guistate.gui_visible && fb_bases[0] && fb_bases[1])
+    if (ksceKernelLockMutex(pebble_mtx_uid, 1, NULL) == 0)
     {
-        if (!ksceKernelLockMutex(pebble_mtx_uid, 1, NULL))
+        const uint32_t *src_buf = fb_bases[fb_now_idx ^ 1];
+        uint32_t *dst_base = (uint32_t *)pParam->base;
+        int dst_pitch = pParam->pitch;
+        int width = (pParam->width < 960) ? pParam->width : 960;
+        int height = (pParam->height < 544) ? pParam->height : 544;
+        int copy_bytes_per_row = width * sizeof(uint32_t);
+        for (int i = 0; i < height; i++)
         {
-            int pitch = pParam->pitch;
-            int width = pParam->width < 960 ? pParam->width : 960;
-            int height = pParam->height < 544 ? pParam->height : 544;
-            current_display_ptr = fb_bases[1 - fb_now_idx];
-            for (int i = 0; i < height; i++)
-            {
-                uintptr_t dst_addr = (uintptr_t)((uint32_t *)pParam->base + i * pitch);
-                const void *src_addr = (const void *)(current_display_ptr + i * 960);
-                int copy_size = width * sizeof(uint32_t);
-                ksceKernelMemcpyKernelToUser((void *)dst_addr, src_addr, copy_size);
-            }
-            fb_now_idx = 1 - fb_now_idx;
-            ksceKernelUnlockMutex(pebble_mtx_uid, 1);
+            const void *src_addr = (const void *)(src_buf + i * 960);
+            void *dst_addr = (void *)(dst_base + i * dst_pitch);
+            ksceKernelMemcpyKernelToUser(dst_addr, src_addr, copy_bytes_per_row);
         }
+        fb_now_idx ^= 1;
+        ksceKernelUnlockMutex(pebble_mtx_uid, 1);
     }
     return TAI_CONTINUE(int, g_framebufhook, head, index, pParam, sync);
 }
