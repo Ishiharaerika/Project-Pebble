@@ -1,5 +1,5 @@
 .section .text
-.global handler_asm_pabt, handler_asm_dabt, handler_asm_undef
+.global asm_pabt, asm_dabt, asm_undef
 .arch armv7-a
 .align 4
 .syntax unified
@@ -8,6 +8,8 @@
 
 @ PABT handler
 asm_pabt:
+    .word 0x0
+    .word 0x0
     push {r0-r5, lr}
     
     @ Check if exception occurred in user mode
@@ -31,6 +33,8 @@ pabt_not_user:
 
 @ DABT handler
 asm_dabt:
+    .word 0x0
+    .word 0x0
     push {r0-r5, lr}
     
     @ Check if exception occurred in user mode
@@ -54,6 +58,8 @@ dabt_not_user:
 
 @ Undefined instruction handler
 asm_undef:
+    .word 0x0
+    .word 0x0
     push {r0-r5, lr}
     
     @ Check if exception occurred in user mode
@@ -74,11 +80,3 @@ asm_undef:
 undef_not_user:
     @ Not handling kernel exceptions
     pop {r0-r5, pc}
-
-.section .rodata
-handler_asm_pabt:
-    .word asm_pabt
-handler_asm_dabt:
-    .word asm_dabt
-handler_asm_undef:
-    .word asm_undef

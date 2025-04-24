@@ -6,9 +6,9 @@ SceUID pebble_mtx_uid = 0;
 bool ksceAppMgrIsExclusiveProcessRunning();
 bool isExclusive = false;
 
-extern void (*handler_asm_pabt)(void);
-extern void (*handler_asm_dabt)(void);
-extern void (*handler_asm_undef)(void);
+extern void asm_pabt(void);
+extern void asm_dabt(void);
+extern void asm_undef(void);
 
 int handle_create(SceUID pid, SceProcEventInvokeParam2 *a2, int a3)
 {
@@ -64,10 +64,10 @@ const SceProcEventHandler handler = {
 int exception_handler(int exception_type)
 {
     SceKernelThreadContextInfo info;
-    uint32_t spsr;
-    asm volatile("mrs %0, spsr" : "=r"(spsr));
-    if ((spsr & 0x1F) != 0x10)
-        return EXCEPTION_NOT_HANDLED;
+    //uint32_t spsr;
+    //asm volatile("mrs %0, spsr" : "=r"(spsr));
+    //if ((spsr & 0x1F) != 0x10)
+    //    return EXCEPTION_NOT_HANDLED;
     if (ksceKernelGetThreadContextInfo(&info) < 0 || info.process_id != g_target_process.pid)
         return EXCEPTION_NOT_HANDLED;
     g_target_process.exception_thid = info.thread_id;
@@ -106,13 +106,13 @@ int exception_handler(int exception_type)
 
 int register_handler(void)
 {
-    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 10, (void *)&handler_asm_dabt) < 0)
+    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_DABT, 10, (void *)asm_dabt) < 0)
     //    return ksceKernelPrintf("Failed registering DABT handler.\n");
 
-    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 10, (void *)&handler_asm_pabt) < 0)
+    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_PABT, 10, (void *)asm_pabt) < 0)
     //    return ksceKernelPrintf("Failed registering PABT handler.\n");
 
-    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 10, (void *)&handler_asm_undef) < 0)
+    //if (ksceExcpmgrRegisterHandler(SCE_EXCP_UNDEF_INSTRUCTION, 10, (void *)asm_undef) < 0)
     //    return ksceKernelPrintf("Failed registering UNDEF handler.\n");
 
     if (ksceKernelRegisterProcEventHandler("pebbleBKPT", &handler, 0) < 0)
