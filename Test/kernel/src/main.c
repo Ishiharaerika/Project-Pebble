@@ -5,11 +5,7 @@ int (*ksceKernelSetPHWP)(SceUID pid, SceUInt32 a2, void *WVR, SceUInt32 WCR);
 int (*ksceKernelSetPHBP)(SceUID pid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
 
 SceUID heap_uid = 0;
-int8_t fb_now_idx = 0;
-uint32_t *current_display_ptr;
 TargetProcess g_target_process;
-uint32_t *fb_bases[2] = {0, 0};
-static tai_hook_ref_t g_framebufhook;
 
 static int find_empty_slot(int start, int end)
 {
@@ -402,31 +398,6 @@ int kernel_write_memory(void *dst, const void *user_modification, SceSize memwri
     return -1;
 }
 
-int ksceDisplaySetFrameBufInternal_patched(int head, int index, const SceDisplayFrameBuf *pParam, int sync)
-{
-    if (!head || !pParam || !pParam->base || !guistate.gui_visible || !fb_bases[0] || !fb_bases[1] ||
-        (index != 0 && isExclusive))
-        return TAI_CONTINUE(int, g_framebufhook, head, index, pParam, sync);
-    if (ksceKernelLockMutex(pebble_mtx_uid, 1, NULL) == 0)
-    {
-        const uint32_t *src_buf = fb_bases[fb_now_idx ^ 1];
-        uint32_t *dst_base = (uint32_t *)pParam->base;
-        int dst_pitch = pParam->pitch;
-        int width = (pParam->width < 960) ? pParam->width : 960;
-        int height = (pParam->height < 544) ? pParam->height : 544;
-        int copy_bytes_per_row = width * sizeof(uint32_t);
-        for (int i = 0; i < height; i++)
-        {
-            const void *src_addr = (const void *)(src_buf + i * 960);
-            void *dst_addr = (void *)(dst_base + i * dst_pitch);
-            ksceKernelMemcpyKernelToUser(dst_addr, src_addr, copy_bytes_per_row);
-        }
-        fb_now_idx ^= 1;
-        ksceKernelUnlockMutex(pebble_mtx_uid, 1);
-    }
-    return TAI_CONTINUE(int, g_framebufhook, head, index, pParam, sync);
-}
-
 void _start() __attribute__((weak, alias("module_start")));
 int module_start(void)
 {
@@ -435,23 +406,13 @@ int module_start(void)
         module_get_export_func(0x10005, "SceProcessmgr", PROCESSMGR_NID, SETPHWP_NID, (uintptr_t *)&ksceKernelSetPHWP) <
             0)
         return SCE_KERNEL_START_FAILED;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-    int ret = taiHookFunctionExportForKernel(0x10005, &g_framebufhook, "SceDisplay", 0x9FED47AC, 0x16466675,
-                                             (const void *)ksceDisplaySetFrameBufInternal_patched);
-#pragma GCC diagnostic pop
-    if (ret < 0)
-        return SCE_KERNEL_START_FAILED;
 
     load_hotkeys();
     kernel_debugger_init();
 
-    SceUID thid = ksceKernelCreateThread("pebble", pebble_thread, 0x40, 0x4000, 0, 0, NULL);
+    SceUID thid = ksceKernelCreateThread("pebble", pebble_thread, 0x40, 0x1000, 0, 0, NULL);
     if (thid <= 0)
-    {
-        taiHookReleaseForKernel(ret, g_framebufhook);
         return SCE_KERNEL_START_FAILED;
-    }
     else
         ksceKernelStartThread(thid, 0, NULL);
 
@@ -459,12 +420,11 @@ int module_start(void)
     memset(&opt, 0, sizeof(opt));
     opt.size = sizeof(opt);
     opt.uselock = 1;
-    heap_uid = ksceKernelCreateHeap("pebbleHeap", 0x4000, &opt);
+    heap_uid = ksceKernelCreateHeap("pebbleHeap", 0x2000, &opt);
 
     if (heap_uid <= 0)
     {
         ksceKernelDeleteThread(thid);
-        taiHookReleaseForKernel(ret, g_framebufhook);
         return SCE_KERNEL_START_FAILED;
     }
     memset(guistate.breakpoints, 0, sizeof(ActiveBKPTSlot));

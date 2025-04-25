@@ -2,7 +2,9 @@
 #include "renderer.h"
 
 State guistate;
-static uint32_t start_addr = 0;
+static SceDisplayFrameBuf original_fb = {0};
+static uint32_t lowest_vaddr = 0x84000000;
+static uint32_t highest_vaddr = 0x8FFFFFFF;
 
 static const MemLayoutInfo layout_info[] = {
     [MEM_LAYOUT_8BIT] = {"%02X", 1}, [MEM_LAYOUT_16BIT] = {"%04X", 2}, [MEM_LAYOUT_32BIT] = {"%08X", 4}};
@@ -342,39 +344,13 @@ static void handle_memview_input(uint32_t released, uint32_t current)
     {
         const MemLayoutInfo *layout = &layout_info[guistate.mem_layout];
         uint32_t layout_bytes = layout->bytes;
-        bool needs_redraw = false;
-        uint32_t module_end_addr = 0x8FFFFFFF;
-        if (guistate.modinfo.size == sizeof(SceKernelModuleInfo))
-        {
-            uint32_t lowest_vaddr = 0;
-            uint32_t highest_end_vaddr = 0;
-            for (int i = 0; i < 4; ++i)
-            {
-                if (guistate.modinfo.segments[i].vaddr != NULL && guistate.modinfo.segments[i].memsz > 0)
-                {
-                    uint32_t seg_start = (uint32_t)guistate.modinfo.segments[i].vaddr;
-                    uint32_t seg_end = seg_start + guistate.modinfo.segments[i].memsz;
-                    if (lowest_vaddr == 0 || seg_start < lowest_vaddr)
-                        lowest_vaddr = seg_start;
-                    if (seg_end > highest_end_vaddr)
-                        highest_end_vaddr = seg_end;
-                }
-            }
-            module_end_addr = highest_end_vaddr != 0 ? highest_end_vaddr : module_end_addr;
-        }
-        const uint32_t min_addr = start_addr;
-        const uint32_t max_addr = module_end_addr > layout_bytes ? module_end_addr - layout_bytes : module_end_addr;
+        bool needs_reread = false;
         if (released & guistate.hotkeys.edit)
         {
-            guistate.edit_mode = (guistate.edit_mode == EDIT_NONE)
-                                     ? (guistate.cursor_column == 0 ? EDIT_ADDRESS : EDIT_VALUE)
-                                     : EDIT_NONE;
-            if (guistate.edit_mode != EDIT_NONE)
-            {
-                guistate.modified_addr = guistate.addr;
-                kernel_read_memory((void *)guistate.addr, guistate.modified_value, layout_bytes);
-                guistate.edit_offset = (guistate.edit_mode == EDIT_ADDRESS) ? 7 : (layout_bytes * 2) - 1;
-            }
+            guistate.edit_mode = guistate.cursor_column == 0 ? EDIT_ADDRESS : EDIT_VALUE;
+            guistate.modified_addr = guistate.addr;
+            kernel_read_memory((void *)guistate.addr, guistate.modified_value, layout_bytes);
+            guistate.edit_offset = (guistate.edit_mode == EDIT_ADDRESS) ? 7 : (layout_bytes * 2) - 1;
         }
         int layout_delta = (released & SCE_CTRL_R1 ? 1 : 0) - (released & SCE_CTRL_L1 ? 1 : 0);
         if (layout_delta != 0)
@@ -402,14 +378,14 @@ static void handle_memview_input(uint32_t released, uint32_t current)
                 uint32_t current_nibble = (guistate.modified_addr / power) % 16;
                 uint32_t new_nibble = (current_nibble + value_delta_nibble + 16) % 16;
                 uint32_t temp_addr = guistate.modified_addr + (new_nibble - current_nibble) * power;
-                if (temp_addr >= min_addr && temp_addr <= max_addr)
+                if (temp_addr >= lowest_vaddr && temp_addr <= highest_vaddr)
                     guistate.modified_addr = temp_addr;
             }
             if (released & guistate.hotkeys.confirm)
             {
                 guistate.addr = guistate.modified_addr;
                 guistate.base_addr = guistate.addr & ~7;
-                needs_redraw = true;
+                needs_reread = true;
                 guistate.edit_mode = EDIT_NONE;
                 guistate.cursor_column = 0;
             }
@@ -437,7 +413,7 @@ static void handle_memview_input(uint32_t released, uint32_t current)
             if (released & guistate.hotkeys.confirm)
             {
                 kernel_write_memory((void *)guistate.addr, guistate.modified_value, layout_bytes);
-                needs_redraw = true;
+                needs_reread = true;
                 guistate.edit_mode = EDIT_NONE;
                 guistate.cursor_column = 1;
             }
@@ -452,10 +428,10 @@ static void handle_memview_input(uint32_t released, uint32_t current)
             {
                 int delta = dy * 8;
                 uint32_t new_addr = guistate.addr + delta;
-                if (new_addr < min_addr)
-                    new_addr = min_addr;
-                else if (new_addr > max_addr)
-                    new_addr = max_addr;
+                if (new_addr < lowest_vaddr)
+                    new_addr = lowest_vaddr;
+                else if (new_addr > highest_vaddr)
+                    new_addr = highest_vaddr;
                 if (new_addr != guistate.addr)
                 {
                     guistate.addr = new_addr;
@@ -465,17 +441,17 @@ static void handle_memview_input(uint32_t released, uint32_t current)
                     if (guistate.addr < first_visible_addr)
                     {
                         guistate.base_addr = guistate.addr & ~7;
-                        needs_redraw = true;
+                        needs_reread = true;
                     }
                     else if (guistate.addr > last_visible_addr)
                     {
                         guistate.base_addr = (guistate.addr - (visible_lines - 1) * 8) & ~7;
-                        needs_redraw = true;
+                        needs_reread = true;
                     }
-                    if (guistate.base_addr < min_addr)
+                    if (guistate.base_addr < lowest_vaddr)
                     {
-                        guistate.base_addr = min_addr;
-                        needs_redraw = true;
+                        guistate.base_addr = lowest_vaddr;
+                        needs_reread = true;
                     }
                 }
             }
@@ -489,7 +465,7 @@ static void handle_memview_input(uint32_t released, uint32_t current)
             kernel_set_watchpoint(guistate.addr, BREAK_READ_WRITE);
         if (released & SCE_CTRL_SQUARE)
             kernel_set_software_breakpoint(guistate.addr, SW_BREAKPOINT_THUMB);
-        if (needs_redraw)
+        if (needs_reread)
             read_memview_cache();
     }
     else if (guistate.active_area == MEMVIEW_STACK)
@@ -502,7 +478,6 @@ static void handle_memview_input(uint32_t released, uint32_t current)
 
 void draw_gui(void)
 {
-    renderer_clearRectangle(0, 0, UI_WIDTH, UI_HEIGHT);
     renderer_setColor(0xFFFFFFFF);
     update_memview_state();
     switch (guistate.ui_state)
@@ -517,7 +492,7 @@ void draw_gui(void)
         break;
     case UI_MEMVIEW: {
         const int visible_lines = (UI_HEIGHT - FONT_HEIGHT) / FONT_HEIGHT;
-        renderer_setColor(0x40FFFFFF);
+        renderer_setColor(0x80FFFFFF);
         if (guistate.active_area == MEMVIEW_HEX)
         {
             int hex_width =
@@ -541,12 +516,12 @@ void draw_gui(void)
         int right_panel_y = 60;
         if (guistate.has_active_bp)
         {
-            renderer_setColor(0x40FFFFFF);
+            renderer_setColor(0x80FFFFFF);
             int highlight_y = (guistate.active_area == MEMVIEW_REGS) ? right_panel_y : right_panel_y + FONT_HEIGHT;
             int highlight_h = 17 * FONT_HEIGHT;
             renderer_drawRectangle(
                 right_panel_x - 5, highlight_y - 5, 210, highlight_h,
-                (guistate.active_area == MEMVIEW_REGS || guistate.active_area == MEMVIEW_STACK) ? 0x40FFFFFF : 0);
+                (guistate.active_area == MEMVIEW_REGS || guistate.active_area == MEMVIEW_STACK) ? 0x80FFFFFF : 0);
             renderer_setColor(0xFFFFFFFF);
             renderer_drawString(right_panel_x, right_panel_y, "Registers:");
             if (guistate.active_area == MEMVIEW_REGS)
@@ -720,8 +695,7 @@ int pebble_thread(SceSize args, void *argp)
 {
     (void)args;
     (void)argp;
-    if (renderer_init() < 0)
-        return -1;
+    renderer_init();
     ksceKernelDelayThread(8 * 1000 * 1000);
     register_handler();
     memset(&guistate, 0, sizeof(guistate));
@@ -732,11 +706,17 @@ int pebble_thread(SceSize args, void *argp)
     guistate.view_state = VIEW_STACK;
     SceCtrlData ctrl;
     uint32_t prev_buttons = 0;
+    SceDisplayFrameBuf current_frame;
+    current_frame.size = sizeof(SceDisplayFrameBuf);
+    current_frame.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8;
+    current_frame.width = UI_WIDTH;
+    current_frame.pitch = UI_WIDTH;
+    current_frame.height = UI_HEIGHT;
     while (1)
     {
         if (!g_target_process.pid)
         {
-            ksceKernelDelayThread(16666);
+            ksceKernelDelayThread(2 * 1000 * 1000);
             continue;
         }
         ksceCtrlPeekBufferPositive(0, &ctrl, 1);
@@ -745,86 +725,97 @@ int pebble_thread(SceSize args, void *argp)
         uint32_t show_gui_key = guistate.hotkeys.show_gui;
         if ((current_buttons == show_gui_key) && (prev_buttons != show_gui_key))
         {
-            if (guistate.gui_visible)
+            if (!guistate.gui_visible)
             {
-                guistate.gui_visible = false;
-                renderer_destroy();
-                //ksceKernelDebugResumeThread(g_target_process.main_thread_id, 0x100);
+                //if (ksceDisplayGetFrameBuf(&original_fb, SCE_DISPLAY_SETBUF_IMMEDIATE) >= 0)
+                //{
+                    if(renderer_init() == 0)
+                    {
+                        if (g_target_process.main_thread_id)
+                            ksceKernelDebugSuspendThread(g_target_process.main_thread_id, 0x100);
+                        else
+                        {
+                            kernel_debugger_on_create();
+                            continue;
+                        }
+                        guistate.gui_visible = true;
+                    }
+                //}
+                //else
+                //    ksceKernelPrintf("!!!Failed getting FB!!!\n");
             }
             else
             {
-                if (renderer_init() == 0)
-                {
-                    guistate.gui_visible = true;
-                    //if (g_target_process.main_thread_id)
-                    //    ksceKernelDebugSuspendThread(g_target_process.main_thread_id, 0x100);
-                    if (guistate.ui_state == UI_MEMVIEW)
-                    {
-                        if (guistate.modinfo.size != sizeof(SceKernelModuleInfo))
-                            kernel_get_moduleinfo(&guistate.modinfo);
-                        read_memview_cache();
-                    }
-                    else
-                        guistate.ui_state = UI_WELCOME;
-                }
+                guistate.gui_visible = false;
+                renderer_destroy();
+                //if (original_fb.size)
+                //    ksceDisplaySetFrameBuf(&original_fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
+                ksceKernelDebugResumeThread(g_target_process.main_thread_id, 0x100);
             }
         }
         if (guistate.gui_visible)
         {
+            ksceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
             if (guistate.ui_state == UI_WELCOME && (released & guistate.hotkeys.confirm))
             {
                 SceKernelModuleInfo info = {.size = sizeof(SceKernelModuleInfo)};
                 if (kernel_get_moduleinfo(&info) >= 0)
                 {
                     guistate.modinfo = info;
-                    uint32_t lowest_vaddr = 0;
+                    guistate.ui_state = UI_MEMVIEW;
+                    guistate.active_area = MEMVIEW_HEX;
                     for (int i = 0; i < 4; ++i)
                     {
-                        if (info.segments[i].vaddr != NULL && info.segments[i].memsz > 0)
+                        if (guistate.modinfo.segments[i].vaddr != NULL && guistate.modinfo.segments[i].memsz > 0)
                         {
-                            uint32_t temp = (uint32_t)info.segments[i].vaddr;
-                            if (lowest_vaddr == 0 || temp < lowest_vaddr)
-                                lowest_vaddr = temp;
+                            uint32_t seg_start = (uint32_t)guistate.modinfo.segments[i].vaddr;
+                            uint32_t seg_end = seg_start + guistate.modinfo.segments[i].memsz;
+                            if (seg_start > 0 && seg_start < lowest_vaddr)
+                                lowest_vaddr = seg_start;
+                            if (seg_end < highest_vaddr)
+                                highest_vaddr = seg_end;
                         }
                     }
-                    if (lowest_vaddr != 0)
-                    {
-                        start_addr = lowest_vaddr;
-                        guistate.addr = lowest_vaddr;
-                        guistate.base_addr = lowest_vaddr;
-                        read_memview_cache();
-                        guistate.ui_state = UI_MEMVIEW;
-                        guistate.active_area = MEMVIEW_HEX;
-                    }
-                    else
-                    {
-                        start_addr = 0x84000000;
-                        guistate.addr = start_addr;
-                        guistate.base_addr = start_addr;
-                        read_memview_cache();
-                        guistate.ui_state = UI_MEMVIEW;
-                        guistate.active_area = MEMVIEW_HEX;
-                    }
+                    read_memview_cache();
                 }
                 else
                     guistate.ui_state = UI_WELCOME;
             }
             else if (guistate.ui_state == UI_MEMVIEW)
+            {
+                if (guistate.modinfo.size != sizeof(SceKernelModuleInfo))
+                {
+                    kernel_get_moduleinfo(&guistate.modinfo);
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        if (guistate.modinfo.segments[i].vaddr != NULL && guistate.modinfo.segments[i].memsz > 0)
+                        {
+                            uint32_t seg_start = (uint32_t)guistate.modinfo.segments[i].vaddr;
+                            uint32_t seg_end = seg_start + guistate.modinfo.segments[i].memsz;
+                            if (seg_start > 0 && seg_start < lowest_vaddr)
+                                lowest_vaddr = seg_start;
+                            if (seg_end < highest_vaddr)
+                                highest_vaddr = seg_end;
+                        }
+                    }
+                }
                 handle_memview_input(released, current_buttons);
+            }
             else
                 handle_feature_input(released);
             if (ksceKernelLockMutex(pebble_mtx_uid, 1, NULL) >= 0)
             {
-                current_display_ptr = fb_bases[fb_now_idx ^ 1];
                 draw_gui();
+                current_frame.base = fb_bases[buf_index];
+                ksceKernelPrintf("!!!Cuurent FB Address: %08X", current_frame.base);
+                if (ksceDisplaySetFrameBuf(&current_frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0)
+                    ksceKernelPrintf("!!!Failed using FB!!!/////");
+                buf_index ^= 1;
                 ksceKernelUnlockMutex(pebble_mtx_uid, 1);
             }
+            prev_buttons = current_buttons;
         }
-        if (guistate.gui_visible)
-            ksceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
-        prev_buttons = current_buttons;
-        ksceKernelDelayThread(16666);
+        ksceKernelDelayThread(33333);
     }
-    renderer_destroy();
     return 0;
 }

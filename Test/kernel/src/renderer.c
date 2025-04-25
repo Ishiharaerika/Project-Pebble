@@ -2,11 +2,13 @@
 
 static uint32_t color = 0xFFFFFFFF;
 static SceUID gui_buffer_uids[2] = {0, 0};
+int8_t buf_index = 0;
+uint32_t *fb_bases[2] = {0, 0};
 const size_t buffer_size = (544 * 960 * sizeof(uint32_t) + 0xfff) & ~0xfff;
 
 void renderer_drawImage(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const unsigned char *img)
 {
-    if (!current_display_ptr || !img || w == 0 || h == 0 || x >= UI_WIDTH || y >= UI_HEIGHT)
+    if (!fb_bases[buf_index] || !img || w == 0 || h == 0 || x >= UI_WIDTH || y >= UI_HEIGHT)
         return;
     uint32_t endX = x + w;
     uint32_t endY = y + h;
@@ -20,7 +22,7 @@ void renderer_drawImage(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const un
     for (uint32_t j = y; j < endY; ++j)
     {
         uint32_t img_row_start_byte = (j - y) * bytes_per_row;
-        uint32_t *row_ptr = current_display_ptr + j * UI_WIDTH;
+        uint32_t *row_ptr = fb_bases[buf_index] + j * UI_WIDTH;
         for (uint32_t i = x; i < endX; ++i)
         {
             uint32_t img_col = i - x;
@@ -41,7 +43,7 @@ void renderer_drawChar(char c, int x, int y)
 
 void renderer_drawRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t clr)
 {
-    if (!current_display_ptr || w == 0 || h == 0 || x >= UI_WIDTH || y >= UI_HEIGHT)
+    if (!fb_bases[buf_index] || w == 0 || h == 0 || x >= UI_WIDTH || y >= UI_HEIGHT)
         return;
     uint32_t endX = x + w;
     uint32_t endY = y + h;
@@ -53,7 +55,7 @@ void renderer_drawRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint
         return;
     for (uint32_t j = y; j < endY; ++j)
     {
-        uint32_t *row_ptr = current_display_ptr + j * UI_WIDTH + x;
+        uint32_t *row_ptr = fb_bases[buf_index] + j * UI_WIDTH + x;
         for (uint32_t i = 0; i < (endX - x); ++i)
             row_ptr[i] = clr;
     }
@@ -61,12 +63,12 @@ void renderer_drawRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint
 
 void renderer_clearRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
-    renderer_drawRectangle(x, y, w, h, 0x00171717);
+    renderer_drawRectangle(x, y, w, h, 0x80171717);
 }
 
 void renderer_drawString(int x, int y, const char *str)
 {
-    if (!str || !current_display_ptr || y < -FONT_HEIGHT || y >= UI_HEIGHT)
+    if (!str || !fb_bases[buf_index] || y < -FONT_HEIGHT || y >= UI_HEIGHT)
         return;
     int cx = x;
     char c;
@@ -93,10 +95,9 @@ void renderer_drawStringF(int x, int y, const char *format, ...)
 void renderer_destroy(void)
 {
     while (ksceKernelTryLockMutex(pebble_mtx_uid, 1) < 0) 
-        ksceKernelDelayThread(1000);
+        ksceKernelDelayThread(500);
     fb_bases[0] = NULL;
     fb_bases[1] = NULL;
-    current_display_ptr = NULL;
     if (gui_buffer_uids[0])
         ksceKernelFreeMemBlock(gui_buffer_uids[0]);
     if (gui_buffer_uids[1])
@@ -112,29 +113,36 @@ int renderer_init(void)
     if (!gui_buffer_uids[0])
         gui_buffer_uids[0] =
             ksceKernelAllocMemBlock("gui_buffer1", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, buffer_size, NULL);
-    if (gui_buffer_uids[0] < 0)
+    if (gui_buffer_uids[0] <= 0)
+    {
+        ksceKernelPrintf("!!!Failed guiBUF 11111!!!\n");
         return -1;
+    }
+
     if (!gui_buffer_uids[1])
         gui_buffer_uids[1] =
             ksceKernelAllocMemBlock("gui_buffer2", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, buffer_size, NULL);
-    if (gui_buffer_uids[1] < 0)
+    if (gui_buffer_uids[1] <= 0)
     {
         ksceKernelFreeMemBlock(gui_buffer_uids[0]);
         gui_buffer_uids[0] = 0;
+        ksceKernelPrintf("!!!Failed guiBUF 22222!!!\n");
         return -1;
     }
-    if (ksceKernelGetMemBlockBase(gui_buffer_uids[0], (void **)&fb_bases[0]) < 0 || !fb_bases[0] ||
-        ksceKernelGetMemBlockBase(gui_buffer_uids[1], (void **)&fb_bases[1]) < 0 || !fb_bases[1])
+
+    if (!fb_bases[0])
+        ksceKernelGetMemBlockBase(gui_buffer_uids[0], (void **)&fb_bases[0]);
+    if (!fb_bases[1])
+        ksceKernelGetMemBlockBase(gui_buffer_uids[1], (void **)&fb_bases[1]);
+    if (!fb_bases[0] || !fb_bases[1])
     {
         renderer_destroy();
         return -1;
     }
-    fb_now_idx = 0;
-    current_display_ptr = fb_bases[0];
+    
     renderer_clearRectangle(0, 0, UI_WIDTH, UI_HEIGHT);
-    current_display_ptr = fb_bases[1];
+    buf_index ^= 1;
     renderer_clearRectangle(0, 0, UI_WIDTH, UI_HEIGHT);
-    current_display_ptr = fb_bases[fb_now_idx];
     return 0;
 }
 
