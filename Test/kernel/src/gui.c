@@ -747,7 +747,7 @@ int pebble_thread(SceSize args, void *argp)
             else
             {
                 guistate.gui_visible = false;
-                renderer_destroy();
+                //renderer_destroy();
                 //if (original_fb.size)
                 //    ksceDisplaySetFrameBuf(&original_fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
                 ksceKernelDebugResumeThread(g_target_process.main_thread_id, 0x100);
