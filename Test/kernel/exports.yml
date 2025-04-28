@@ -5,3 +5,8 @@ pebble:
     minor: 0
   main:
     start: module_start
+  libraries:
+    pebble:
+      syscall: true
+      functions:
+      - kernel_get_userinfo
