@@ -4,8 +4,11 @@ int module_get_export_func(SceUID pid, const char *modname, uint32_t libnid, uin
 int (*ksceKernelSetPHWP)(SceUID pid, SceUInt32 a2, void *WVR, SceUInt32 WCR);
 int (*ksceKernelSetPHBP)(SceUID pid, SceUInt32 a2, void *BVR, SceUInt32 BCR);
 
-SceUID heap_uid = 0;
+SceUID evtflag = 0;
+SceUID pebble_mtx_uid = 0;
+static SceUID heap_uid = 0;
 TargetProcess g_target_process;
+static SceUID gui_buffer_uids[2] = {0, 0};
 
 static int find_empty_slot(int start, int end)
 {
@@ -41,6 +44,8 @@ void kernel_debugger_init(void)
     guistate.ui_state = UI_WELCOME;
     guistate.view_state = VIEW_STACK;
     guistate.edit_mode = EDIT_NONE;
+    lowest_vaddr = 0x84000000;
+    highest_vaddr = 0x8FFFFFFF;
 }
 
 int kernel_set_hardware_breakpoint(uint32_t address)
@@ -169,11 +174,13 @@ int kernel_get_callstack(uint32_t *dst, int depth)
     if (g_target_process.pid <= 0 || g_target_process.exception_thid <= 0 ||
         ksceKernelIsThreadDebugSuspended(g_target_process.exception_thid) <= 0)
         return -1;
+        
     uint32_t call_stack_buffer[MAX_CALL_STACK_DEPTH];
     int current_depth = 0;
     int max_depth = (depth < MAX_CALL_STACK_DEPTH) ? depth : MAX_CALL_STACK_DEPTH;
     call_stack_buffer[current_depth++] = current_registers.pc;
     uint32_t current_fp = current_registers.r11;
+
     while (current_depth < max_depth)
     {
         if (current_fp == 0 || (current_fp & 3) != 0)
@@ -212,12 +219,12 @@ int kernel_get_moduleinfo(SceKernelModuleInfo *module_info)
     return ksceKernelGetModuleInfo(g_target_process.pid, ksceKernelGetModuleIdByPid(g_target_process.pid), module_info);
 }
 
-int kernel_get_memblockinfo(const void *address, uint32_t info)
+int kernel_get_memblockinfo(const void *address, uint32_t *info)
 {
     SceUID memblok_uid = ksceKernelFindProcMemBlockByAddr(g_target_process.pid, address, 0);
     if (memblok_uid <= 0)
         return -1;
-    return ksceKernelGetMemBlockType(memblok_uid, &info);
+    return ksceKernelGetMemBlockType(memblok_uid, info);
 }
 
 void kernel_suspend_process(void)
@@ -380,22 +387,33 @@ int kernel_read_memory(const void *src_addr, void *user_dst, SceSize size)
     return ksceKernelCopyFromUserProc(g_target_process.pid, user_dst, src_addr, size);
 }
 
-int kernel_write_memory(void *dst, const void *user_modification, SceSize memwrite_len)
+int kernel_write_memory(uint32_t dst, const void *user_modification, SceSize memwrite_len)
 {
     if (!dst || !user_modification || !memwrite_len || g_target_process.pid <= 0)
         return -1;
+    uint32_t mem_type;
 
-    uint32_t mem_type = 0;
-
-    if (kernel_get_memblockinfo(dst, (uint32_t)&mem_type) >= 0)
+    if (kernel_get_memblockinfo((void *)dst, &mem_type) >= 0)
     {
         if (mem_type & SCE_KERNEL_MEMBLOCK_TYPE_USER_RX)
-            return ksceKernelCopyToUserProcTextDomain(g_target_process.pid, dst, user_modification, memwrite_len);
+            return ksceKernelCopyToUserProcTextDomain(g_target_process.pid, (void *)dst, user_modification, memwrite_len);
         else
-            return ksceKernelCopyToUserProc(g_target_process.pid, dst, user_modification, memwrite_len);
+            return ksceKernelCopyToUserProc(g_target_process.pid, (void *)dst, user_modification, memwrite_len);
     }
 
     return -1;
+}
+
+void kernel_get_userinfo(SceUID PID_user, SceUID pebble_mtx_uid_user, uint32_t *fb_base0_user, SceUID evtflag_user)
+{
+    pebble_mtx_uid = kscePUIDtoGUID(PID_user, pebble_mtx_uid_user);
+
+    SceSize mapped_size;
+    SceUInt32 mapped_offset;
+    gui_buffer_uids[0] = ksceKernelProcUserMap(PID_user, "gui_buffer1", 2, fb_base0_user, 0x200000, (void **)&fb_bases[0], &mapped_size, &mapped_offset);
+    gui_buffer_uids[1] = ksceKernelProcUserMap(PID_user, "gui_buffer1", 2, fb_base0_user + 0x80000, 0x200000, (void **)&fb_bases[1], &mapped_size, &mapped_offset);
+    evtflag = kscePUIDtoGUID(PID_user, evtflag_user);
+    //ksceKernelPrintf("!!!USRINFO: usrFB0: %#X, usrFB1: %#X\nusrPID: %#X, mtxID: %#X\nkrnlFB0: %#X, krnlFB1: %#X\nevtFlg: %#X, evtFlgUsr: %#X, bufID0: %#X, bufID1: %#X!!!\n", fb_base0_user, fb_base0_user + 0x80000, PID_user, pebble_mtx_uid, fb_bases[0], fb_bases[1], evtflag, evtflag_user, gui_buffer_uids[0], gui_buffer_uids[1]);
 }
 
 void _start() __attribute__((weak, alias("module_start")));
@@ -410,7 +428,7 @@ int module_start(void)
     load_hotkeys();
     kernel_debugger_init();
 
-    SceUID thid = ksceKernelCreateThread("pebble", pebble_thread, 0x40, 0x1000, 0, 0, NULL);
+    SceUID thid = ksceKernelCreateThread("pebble", pebble_thread, 0x40, 0x2000, 0, 0, NULL);
     if (thid <= 0)
         return SCE_KERNEL_START_FAILED;
     else

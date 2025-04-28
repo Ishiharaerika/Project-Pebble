@@ -1,10 +1,8 @@
 #include "renderer.h"
 
-static uint32_t color = 0xFFFFFFFF;
-static SceUID gui_buffer_uids[2] = {0, 0};
-int8_t buf_index = 0;
-uint32_t *fb_bases[2] = {0, 0};
-const size_t buffer_size = (544 * 960 * sizeof(uint32_t) + 0xfff) & ~0xfff;
+static uint32_t color = 0xFF171717;
+uint8_t buf_index = 0;
+uint32_t *fb_bases[2] = {NULL, NULL};
 
 void renderer_drawImage(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const unsigned char *img)
 {
@@ -92,58 +90,62 @@ void renderer_drawStringF(int x, int y, const char *format, ...)
     renderer_drawString(x, y, str);
 }
 
-void renderer_destroy(void)
-{
-    while (ksceKernelTryLockMutex(pebble_mtx_uid, 1) < 0) 
-        ksceKernelDelayThread(500);
-    fb_bases[0] = NULL;
-    fb_bases[1] = NULL;
-    if (gui_buffer_uids[0])
-        ksceKernelFreeMemBlock(gui_buffer_uids[0]);
-    if (gui_buffer_uids[1])
-        ksceKernelFreeMemBlock(gui_buffer_uids[1]);
-
-    gui_buffer_uids[0] = 0;
-    gui_buffer_uids[1] = 0;
-    ksceKernelUnlockMutex(pebble_mtx_uid, 1);
-}
+//void renderer_destroy(void)
+//{
+//    while (ksceKernelTryLockMutex(pebble_mtx_uid, 1) < 0) 
+//        ksceKernelDelayThread(500);
+//    fb_bases[0] = NULL;
+//    fb_bases[1] = NULL;
+//    gui_buffer_uids[0] = 0;
+//    gui_buffer_uids[1] = 0;
+//    ksceKernelPrintf("!!!ALL DESTROYED!!!\n");
+//    ksceKernelUnlockMutex(pebble_mtx_uid, 1);
+//}
 
 int renderer_init(void)
 {
-    if (!gui_buffer_uids[0])
-        gui_buffer_uids[0] =
-            ksceKernelAllocMemBlock("gui_buffer1", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, buffer_size, NULL);
-    if (gui_buffer_uids[0] <= 0)
-    {
-        ksceKernelPrintf("!!!Failed guiBUF 11111!!!\n");
-        return -1;
-    }
-
-    if (!gui_buffer_uids[1])
-        gui_buffer_uids[1] =
-            ksceKernelAllocMemBlock("gui_buffer2", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, buffer_size, NULL);
-    if (gui_buffer_uids[1] <= 0)
-    {
-        ksceKernelFreeMemBlock(gui_buffer_uids[0]);
-        gui_buffer_uids[0] = 0;
-        ksceKernelPrintf("!!!Failed guiBUF 22222!!!\n");
-        return -1;
-    }
-
-    if (!fb_bases[0])
-        ksceKernelGetMemBlockBase(gui_buffer_uids[0], (void **)&fb_bases[0]);
-    if (!fb_bases[1])
-        ksceKernelGetMemBlockBase(gui_buffer_uids[1], (void **)&fb_bases[1]);
-    if (!fb_bases[0] || !fb_bases[1])
-    {
-        renderer_destroy();
-        return -1;
-    }
+    //SceKernelAllocMemBlockKernelOpt optp_1;
+	//optp_1.size = sizeof(SceKernelAllocMemBlockKernelOpt);
+	//optp_1.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_PHYCONT | SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_PADDR;
+    //optp_1.paddr = 0x54000000;
+    //if (!gui_buffer_uids[0])
+    //    gui_buffer_uids[0] =
+    //        ksceKernelAllocMemBlock("gui_buffer1", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_NC_RW, 0x200000, &optp_1);
+    //if (gui_buffer_uids[0] <= 0)
+    //{
+    //    ksceKernelPrintf("!!!Failed guiBUF 11111!!!\n");
+    //    return -1;
+    //}
+//
+    //SceKernelAllocMemBlockKernelOpt optp_2;
+	//optp_2.size = sizeof(SceKernelAllocMemBlockKernelOpt);
+	//optp_2.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_PHYCONT | SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_PADDR;
+    //optp_2.paddr = 0x54200000;
+    //if (!gui_buffer_uids[1])
+    //    gui_buffer_uids[1] =
+    //        ksceKernelAllocMemBlock("gui_buffer2", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_NC_RW, 0x200000, &optp_2);
+    //if (gui_buffer_uids[1] <= 0)
+    //{
+    //    ksceKernelFreeMemBlock(gui_buffer_uids[0]);
+    //    gui_buffer_uids[0] = 0;
+    //    ksceKernelPrintf("!!!Failed guiBUF 22222!!!\n");
+    //    return -1;
+    //}
+//
+    //if (!fb_bases[0])
+    //    ksceKernelGetMemBlockBase(gui_buffer_uids[0], (void **)&fb_bases[0]);
+    //if (!fb_bases[1])
+    //    ksceKernelGetMemBlockBase(gui_buffer_uids[1], (void **)&fb_bases[1]);
+    //if (!fb_bases[0] || !fb_bases[1])
+    //{
+    //    renderer_destroy();
+    //    return -1;
+    //}
     
     renderer_clearRectangle(0, 0, UI_WIDTH, UI_HEIGHT);
     buf_index ^= 1;
     renderer_clearRectangle(0, 0, UI_WIDTH, UI_HEIGHT);
-    return 0;
+    return 1;
 }
 
 void renderer_setColor(uint32_t c)

@@ -2,9 +2,6 @@
 
 SceThreadCpuRegisters all_registers;
 SceArmCpuRegisters current_registers;
-SceUID pebble_mtx_uid = 0;
-bool ksceAppMgrIsExclusiveProcessRunning();
-bool isExclusive = false;
 
 extern void asm_pabt(void);
 extern void asm_dabt(void);
@@ -15,19 +12,13 @@ int handle_create(SceUID pid, SceProcEventInvokeParam2 *a2, int a3)
     (void)a2;
     (void)a3;
 
-    if (!pebble_mtx_uid)
-    {
-        pebble_mtx_uid = ksceKernelCreateMutex("pebble_gui_mutex", 0, 0, NULL);
-        ksceKernelPrintf("!!!Mutex Created!!!\n");
-    }
-
     g_target_process.pid = pid;
+    guistate.gui_visible = false;
     guistate.ui_state = UI_WELCOME;
     guistate.edit_mode = EDIT_NONE;
     guistate.view_state = VIEW_STACK;
     guistate.mem_layout = MEM_LAYOUT_8BIT;
     load_hotkeys();
-    isExclusive = ksceAppMgrIsExclusiveProcessRunning();
     kernel_debugger_on_create();
 
     return 0;
@@ -39,14 +30,6 @@ int handle_kill(SceUID pid, SceProcEventInvokeParam1 *a2, int a3)
     (void)a2;
     (void)a3;
     kernel_debugger_init();
-    isExclusive = false;
-
-    if (pebble_mtx_uid)
-    {
-        ksceKernelDeleteMutex(pebble_mtx_uid);
-        ksceKernelPrintf("!!!Mutex Deleted!!!\n");
-        pebble_mtx_uid = 0;
-    }
 
     return 0;
 }
