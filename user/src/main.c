@@ -19,6 +19,7 @@ int pebble_thread_user(SceSize args, void *argp)
 {
     (void)args;
     (void)argp;
+    //sceKernelDelayThread(9 * 1000 * 1000);
     SceUID PID_user = sceKernelGetProcessId();
     pebble_mtx_uid_user = sceKernelCreateMutex("pebble_gui_mutex", 0, 0, NULL);
     user_buffer_uids[0] = sceKernelAllocMemBlock("user_buffer", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, 0x200000, NULL);
@@ -32,7 +33,7 @@ int pebble_thread_user(SceSize args, void *argp)
         sceKernelGetMemBlockBase(user_buffer_uids[1], (void **)&fb_bases_user[1]);
     else
         sceClibPrintf("Failed for buffer1111 allocating!!!!!\n");
-
+    
     user_frame.size = sizeof(SceDisplayFrameBuf);
     user_frame.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8;
     user_frame.width = 960;

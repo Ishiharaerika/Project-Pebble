@@ -1,55 +1,65 @@
-cmake_minimum_required(VERSION 3.20)
-
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-  if(DEFINED ENV{VITASDK})
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
-  else()
-    message(FATAL_ERROR "Please define VITASDK to point to your SDK path!")
-  endif()
-endif()
-include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
-
-project(pebble_k LANGUAGES C ASM)
-
+project(pebble LANGUAGES C ASM)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib -Wall -Wextra -Wpedantic -O3 -std=gnu99")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -nostdlib")
+
+add_library(pebble_stub_weak STATIC IMPORTED GLOBAL)
+
+set_target_properties(pebble_stub_weak PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libpebble_stub_weak.a"
+)
 
 include_directories(
   include
 )
 
-add_executable(pebble_k
+add_executable(pebble
+  src/gui.c
   src/main.c
+  src/renderer.c
   src/exceptions.S
   src/exceptions.c
 )
 
-target_link_libraries(pebble_k
+target_link_libraries(pebble
+  k
+  taihenForKernel_stub
   taihenModuleUtils_stub
-  SceThreadmgrForKernel_stub
-  SceThreadmgrForDriver_stub
-  SceSysmemForDriver_stub
-  SceSysmemForKernel_stub
-  SceExcpmgrForKernel_stub
-  SceSysclibForDriver_stub 
-  SceModulemgrForKernel_stub
-  SceProcessmgrForKernel_stub
+  SceCpuForDriver_stub
+  SceCtrlForDriver_stub
   SceDebugForDriver_stub
+  SceDipswForDriver_stub
+  SceAppMgrForDriver_stub
+  SceSysconForDriver_stub
+  SceSysmemForDriver_stub
+  SceDisplayForDriver_stub
+  SceSysclibForDriver_stub
+  SceSysrootForDriver_stub
+  SceThreadmgrForDriver_stub
+  SceIofilemgrForDriver_stub
+  SceKernelSuspendForDriver_stub
+  SceSysmemForKernel_363_stub_weak
+  SceExcpmgrForKernel_363_stub
+  SceThreadmgrForKernel_363_stub_weak
+  SceModulemgrForKernel_363_stub_weak
+  SceProcessmgrForKernel_363_stub_weak
+  SceSysrootForKernel_stub
+  SceProcEventForDriver_stub
 )
 
-vita_create_self(pebble_k.skprx pebble_k
+vita_create_self(pebble.skprx pebble
   CONFIG exports.yml
   UNSAFE
 )
 
 vita_create_stubs(stubs
-  "pebble_k"
+  pebble
   exports.yml
   KERNEL
 )
 
-add_library(pebble_k_stub STATIC IMPORTED GLOBAL)
-
-set_target_properties(pebble_k_stub PROPERTIES
-  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libpebble_k_stub.a"
+add_custom_target(copy_skprx ALL
+  COMMAND ${CMAKE_COMMAND} -E copy
+  "${CMAKE_CURRENT_BINARY_DIR}/pebble.skprx"
+  "${CMAKE_BINARY_DIR}/../bin/pebble.skprx"
+  DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/pebble.skprx"
 )

@@ -19,6 +19,7 @@ void renderer_drawString(int x, int y, const char *str);
 void renderer_drawStringF(int x, int y, const char *format, ...);
 void renderer_drawRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t clr);
 void renderer_clearRectangle(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
+void draw_frame(int x, int y, int width, int height, uint32_t color);
 int renderer_init(void);
 //void renderer_destroy(void);
 void renderer_setColor(uint32_t c);

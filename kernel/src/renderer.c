@@ -90,6 +90,19 @@ void renderer_drawStringF(int x, int y, const char *format, ...)
     renderer_drawString(x, y, str);
 }
 
+void draw_frame(int x, int y, int width, int height, uint32_t color)
+{
+    const int thickness = 1;
+    // Top
+    renderer_drawRectangle(x, y, width, thickness, color);
+    // Bottom
+    renderer_drawRectangle(x, y + height, width, thickness, color);
+    // Left
+    renderer_drawRectangle(x, y, thickness, height + thickness, color);
+    // Right
+    renderer_drawRectangle(x + width, y, thickness, height + thickness, color);
+}
+
 //void renderer_destroy(void)
 //{
 //    while (ksceKernelTryLockMutex(pebble_mtx_uid, 1) < 0) 
